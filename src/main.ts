@@ -50,6 +50,7 @@ function draw(){
  for(const u of game.units){if(!u.alive)continue;
  ctx.beginPath();ctx.fillStyle=u.team==='blue'?'#438cda':'#d44d55';ctx.arc(u.x,u.y,u.radius,0,Math.PI*2);ctx.fill();
  ctx.strokeStyle=u.kind==='hero'?'#f3dc87':'#c8c2a8';ctx.lineWidth=u.kind==='hero'?4:2;ctx.stroke();
+ if(u.kind==='core'&&game.coreShielded(u.team)){ctx.beginPath();ctx.strokeStyle='#9fd8ffaa';ctx.lineWidth=4;ctx.setLineDash([6,5]);ctx.arc(u.x,u.y,u.radius+9,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);}
  if(u.kind==='core'){ctx.fillStyle='#fff0b4';ctx.textAlign='center';ctx.font='bold 28px system-ui';ctx.fillText('✦',u.x,u.y+10);}
  if(u.kind==='tower'){ctx.fillStyle='#f3d88d';ctx.fillRect(u.x-8,u.y-8,16,16);}
  // Anel de controle: cada estado ativo desenha um arco com sua cor.
@@ -65,6 +66,6 @@ function draw(){
 const STEP=1000/60;let last=0,accumulator=0;
 function frame(now:number){if(!last)last=now;accumulator+=Math.min(250,now-last);last=now;let loops=0;while(accumulator>=STEP&&loops++<8){game.step();accumulator-=STEP;}
  passive.textContent='✨ Q '+SKILLS[game.hero.role!].q.name+' · W '+SKILLS[game.hero.role!].w.name+' · E '+SKILLS[game.hero.role!].e.name+' · R '+SKILLS[game.hero.role!].r.name+' | Passiva: '+TALENTS[game.hero.role!].passive.name+' | Talentos: '+game.talents.points+' pontos | Ramo: '+(game.talents.path??'livre')+' '+game.talents.rank+'/3';
- hud.textContent='🕒 '+environment(game.tick).clock+' '+environment(game.tick).phase+' | 🌿 '+terrainAt(game.hero.x,game.hero.y)+' | ❤️ '+Math.ceil(game.hero.hp)+'/'+game.hero.maxHp+' | 🔮 '+Math.floor(game.hero.mana)+' | ⭐ Nível '+game.level+' | 🪙 '+game.gold+' ouro | ⚔ '+game.kills+' tropas | Q '+(game.qCooldown?Math.ceil(game.qCooldown/60)+'s':'pronta')+' | W '+(game.wCooldown?Math.ceil(game.wCooldown/60)+'s':'pronta')+' | E '+(game.cooldowns.e?Math.ceil(game.cooldowns.e/60)+'s':'pronta')+' | R '+(game.level<6?'nível 6':game.cooldowns.r?Math.ceil(game.cooldowns.r/60)+'s':'pronta')+' | 🎒 '+game.inventory.length+'/6'+(game.status.kinds(game.hero,game.tick).length?' | 🌀 '+game.status.kinds(game.hero,game.tick).map(k=>CC_NAMES[k]).join(', '):'')+' | '+game.notice;
+ hud.textContent='🕒 '+environment(game.tick).clock+' '+environment(game.tick).phase+' | 🌿 '+terrainAt(game.hero.x,game.hero.y)+' | ☠ '+game.scores.get(game.hero.id)!.kills+'/'+game.scores.get(game.hero.id)!.deaths+' | ❤️ '+Math.ceil(game.hero.hp)+'/'+game.hero.maxHp+' | 🔮 '+Math.floor(game.hero.mana)+' | ⭐ Nível '+game.level+' | 🪙 '+game.gold+' ouro | ⚔ '+game.kills+' tropas | Q '+(game.qCooldown?Math.ceil(game.qCooldown/60)+'s':'pronta')+' | W '+(game.wCooldown?Math.ceil(game.wCooldown/60)+'s':'pronta')+' | E '+(game.cooldowns.e?Math.ceil(game.cooldowns.e/60)+'s':'pronta')+' | R '+(game.level<6?'nível 6':game.cooldowns.r?Math.ceil(game.cooldowns.r/60)+'s':'pronta')+' | 🎒 '+game.inventory.length+'/6'+(game.status.kinds(game.hero,game.tick).length?' | 🌀 '+game.status.kinds(game.hero,game.tick).map(k=>CC_NAMES[k]).join(', '):'')+' | '+game.notice;
  draw();requestAnimationFrame(frame);}
 app.setAttribute('data-version','0.2.0');requestAnimationFrame(frame);

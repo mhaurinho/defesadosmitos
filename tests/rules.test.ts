@@ -4,7 +4,7 @@ import {decideBot,decideBotCast} from '../src/game/bots';
 import {LANE_Y,lanePath} from '../src/game/lanes';
 import {HARD_CC_IMMUNITY,StatusBook} from '../src/game/status';
 import {buyItem} from '../src/game/economy';
-import {HEROES,ITEMS,physicalDamage,type Unit} from '../src/game/data';
+import {HEROES,ITEMS,physicalDamage,respawnTicks,type Role,type Unit} from '../src/game/data';
 
 const unit=(over:Partial<Unit>):Unit=>({id:1,team:'red',kind:'hero',x:500,y:300,hp:100,maxHp:100,mana:0,maxMana:0,attack:10,armor:0,range:40,speed:1,radius:18,cooldown:0,alive:true,respawn:0,level:1,xp:0,...over});
 
@@ -216,6 +216,29 @@ describe('controle',()=>{
  });
 });
 
+describe('ritmo e simulação',()=>{
+ test('renascimento fica mais longo com o nível',()=>{
+  expect(respawnTicks(10)).toBeGreaterThan(respawnTicks(1));
+  const g=new Game();const enemy=g.units.find(u=>u.kind==='hero'&&u.team==='red')!;
+  enemy.level=8;enemy.hp=1;(g as any).hit(enemy,50,g.hero);
+  expect(enemy.respawn).toBe(respawnTicks(8));
+ });
+ test('placar registra abate, morte e dano entre heróis',()=>{
+  const g=new Game();const enemy=g.units.find(u=>u.kind==='hero'&&u.team==='red')!;
+  enemy.hp=40;(g as any).hit(enemy,100,g.hero,true);
+  expect(g.scores.get(g.hero.id)).toMatchObject({kills:1,heroDamage:40});
+  expect(g.scores.get(enemy.id)).toMatchObject({deaths:1,damageTaken:40});
+ });
+ test('times personalizados e autopilot para simulação',()=>{
+  const allies:Role[]=['boto','cuca','iara','saci'],enemies:Role[]=['mula','boitata','curupira','caipora','matinta'];
+  const g=new Game('mapinguari',{allies,enemies,autopilot:true});
+  expect(g.units.filter(u=>u.kind==='hero'&&u.team==='blue').map(u=>u.role)).toEqual(['mapinguari',...allies]);
+  expect(g.units.filter(u=>u.kind==='hero'&&u.team==='red').map(u=>u.role)).toEqual(enemies);
+  const x=g.hero.x;for(let i=0;i<120;i++)g.step();
+  expect(g.hero.x).not.toBe(x);
+ });
+});
+
 describe('partida',()=>{
  test('tropas avançam pela rota mesmo sem inimigo à vista',()=>{
   const g=new Game();
@@ -247,14 +270,17 @@ describe('partida',()=>{
   const g=new Game();
   g.move(900,300);g.hero.hp=1;(g as any).hit(g.hero,50,g.bot);
   expect(g.hero.alive).toBe(false);
-  for(let i=0;i<180;i++)g.step();
+  for(let i=0;i<respawnTicks(1);i++)g.step();
   expect(g.hero.alive).toBe(true);expect(g.hero.hp).toBe(g.hero.maxHp);
   expect(g.destination).toEqual({x:170,y:300});
  });
- test('destruir o núcleo vermelho dá vitória e congela a simulação',()=>{
+ test('núcleo só cai depois das três torres; destruí-lo dá vitória e congela a simulação',()=>{
   const g=new Game();
   const core=g.units.find(u=>u.kind==='core'&&u.team==='red')!;
   core.hp=1;(g as any).hit(core,50,g.hero);
+  expect(g.winner).toBeNull();expect(core.hp).toBe(1);
+  for(const t of g.units)if(t.kind==='tower'&&t.team==='red')t.alive=false;
+  (g as any).hit(core,50,g.hero);
   expect(g.winner).toBe('blue');
   const tick=g.tick;g.step();expect(g.tick).toBe(tick);
  });

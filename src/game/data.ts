@@ -30,9 +30,15 @@ export const FOUNTAIN_RADIUS=140;
 export const FOUNTAIN_REGEN=0.012;
 export const XP_SHARE_RADIUS=420;
 export const PASSIVE_GOLD_TICKS=60;
-export const TOWER_HP=1100;
+export const TOWER_HP=2800;
+export const TOWER_ARMOR=30;
 export const CORE_HP=2200;
 /** Habilidades causam dano reduzido a estruturas, que caem principalmente por ataques básicos e tropas. */
 export const SKILL_STRUCTURE_MULT=0.3;
 /** Torres punem heróis que entram sem cobertura de tropas. */
 export const TOWER_HERO_MULT=2.5;
+/** Renascimento: 3 s fixos + 0,75 s por nível; morrer tarde custa mais. */
+export const respawnTicks=(level:number)=>180+45*level;
+/** Ganho por nível: vida cresce mais que ataque para lutas não virarem execuções instantâneas. */
+export const LEVEL_HP=60;
+export const LEVEL_ATTACK=3;

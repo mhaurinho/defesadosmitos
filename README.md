@@ -23,6 +23,8 @@ Testes de regras (dano, loja, bot, economia, partida e determinismo):
 npm test
 ```
 
+Balanceamento por simulação (drafts aleatórios, todos na IA): `npm run sim -- 100`. Veja [docs/BALANCEAMENTO.md](docs/BALANCEAMENTO.md).
+
 ### Comandos
 - Clique no mapa: movimentar herói.
 - **Q**: explosão de dano em área (cooldown).

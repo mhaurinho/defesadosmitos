@@ -1,6 +1,7 @@
 import {FOUNTAIN_RADIUS,type Unit} from './data';
 import {SKILLS,canCast,type Slot} from './skills';
 import {laneTarget} from './lanes';
+export const RETREAT_HP=0.35;
 export type BotState='push'|'fight'|'retreat'|'hold';
 /** Torre inimiga sem nenhuma tropa aliada dentro do alcance dela: herói IA não deve entrar. */
 export function uncoveredTowers(unit:Unit,enemies:readonly Unit[],allies:readonly Unit[]):Unit[]{
@@ -14,9 +15,9 @@ export function decideBot(unit:Unit,enemies:readonly Unit[],allies:readonly Unit
  const nearest=candidates.sort((a,b)=>Math.hypot(a.x-unit.x,a.y-unit.y)-Math.hypot(b.x-unit.x,b.y-unit.y))[0];
  const base={x:unit.team==='blue'?100:1000,y:300};
  const hpRatio=unit.hp/unit.maxHp;
- // Histerese: recua abaixo de 23% e só volta à rota após recuperar 90% na fonte.
+ // Histerese: recua abaixo de RETREAT_HP e só volta à rota após recuperar 90% na fonte.
  const atBase=Math.hypot(base.x-unit.x,base.y-unit.y)<FOUNTAIN_RADIUS;
- if(unit.kind==='hero'&&(hpRatio<0.23||(atBase&&hpRatio<0.9)))return {state:'retreat',...base};
+ if(unit.kind==='hero'&&(hpRatio<RETREAT_HP||(atBase&&hpRatio<0.9)))return {state:'retreat',...base};
  // Tropas têm aggro curto para não abandonarem a própria rota.
  const aggro=unit.kind==='minion'?140:230;
  if(nearest&&Math.hypot(nearest.x-unit.x,nearest.y-unit.y)<aggro)return {state:'fight',target:nearest,x:nearest.x,y:nearest.y};
