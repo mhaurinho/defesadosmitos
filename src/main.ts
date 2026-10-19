@@ -5,8 +5,10 @@ import {SKILLS,type Slot} from './game/skills';
 import {LANES,lanePath} from './game/lanes';
 import type {CcKind} from './game/status';
 const CC_COLORS:Record<CcKind,string>={stun:'#ffe066',root:'#7bd389',slow:'#6cb4ff',silence:'#c58cff'};
+const PHASE_NAMES:Record<Phase,string>={dawn:'amanhecer',day:'dia',dusk:'entardecer',night:'noite'};
+const TERRAIN_NAMES:Record<Terrain,string>={river:'rio',forest:'floresta',mist:'névoa',plain:'campo'};
 const CC_NAMES:Record<CcKind,string>={stun:'atordoado',root:'enraizado',slow:'lento',silence:'silenciado'};
-import {environment,terrainAt} from './game/world';
+import {environment,terrainAt,type Phase,type Terrain} from './game/world';
 const game=new Game();
 const canvas=document.querySelector<HTMLCanvasElement>('#game')!;
 const ctx=canvas.getContext('2d')!;
@@ -17,6 +19,8 @@ controls.style.cssText='display:flex;flex-wrap:wrap;gap:10px;align-items:center;
 const select=document.createElement('select');
 select.setAttribute('aria-label','Escolher herói');
 for(const [id,hero] of Object.entries(HEROES)){const option=document.createElement('option');option.value=id;option.textContent=hero.name;select.append(option);}
+// O seletor começa no herói com que a partida foi criada, não na primeira opção da lista.
+select.value=game.hero.role!;
 select.addEventListener('change',()=>game.reset(select.value as Role));
 controls.append('Herói: ',select);
 const passive=document.createElement('span');passive.style.cssText='padding:8px;color:#e9c985';
@@ -66,6 +70,6 @@ function draw(){
 const STEP=1000/60;let last=0,accumulator=0;
 function frame(now:number){if(!last)last=now;accumulator+=Math.min(250,now-last);last=now;let loops=0;while(accumulator>=STEP&&loops++<8){game.step();accumulator-=STEP;}
  passive.textContent='✨ Q '+SKILLS[game.hero.role!].q.name+' · W '+SKILLS[game.hero.role!].w.name+' · E '+SKILLS[game.hero.role!].e.name+' · R '+SKILLS[game.hero.role!].r.name+' | Passiva: '+TALENTS[game.hero.role!].passive.name+' | Talentos: '+game.talents.points+' pontos | Ramo: '+(game.talents.path??'livre')+' '+game.talents.rank+'/3';
- hud.textContent='🕒 '+environment(game.tick).clock+' '+environment(game.tick).phase+' | 🌿 '+terrainAt(game.hero.x,game.hero.y)+' | ☠ '+game.scores.get(game.hero.id)!.kills+'/'+game.scores.get(game.hero.id)!.deaths+' | ❤️ '+Math.ceil(game.hero.hp)+'/'+game.hero.maxHp+' | 🔮 '+Math.floor(game.hero.mana)+' | ⭐ Nível '+game.level+' | 🪙 '+game.gold+' ouro | ⚔ '+game.kills+' tropas | Q '+(game.qCooldown?Math.ceil(game.qCooldown/60)+'s':'pronta')+' | W '+(game.wCooldown?Math.ceil(game.wCooldown/60)+'s':'pronta')+' | E '+(game.cooldowns.e?Math.ceil(game.cooldowns.e/60)+'s':'pronta')+' | R '+(game.level<6?'nível 6':game.cooldowns.r?Math.ceil(game.cooldowns.r/60)+'s':'pronta')+' | 🎒 '+game.inventory.length+'/6'+(game.status.kinds(game.hero,game.tick).length?' | 🌀 '+game.status.kinds(game.hero,game.tick).map(k=>CC_NAMES[k]).join(', '):'')+' | '+game.notice;
+ hud.textContent='🕒 '+environment(game.tick).clock+' '+PHASE_NAMES[environment(game.tick).phase]+' | 🌿 '+TERRAIN_NAMES[terrainAt(game.hero.x,game.hero.y)]+' | ☠ '+game.scores.get(game.hero.id)!.kills+'/'+game.scores.get(game.hero.id)!.deaths+' | ❤️ '+Math.ceil(game.hero.hp)+'/'+game.hero.maxHp+' | 🔮 '+Math.floor(game.hero.mana)+' | ⭐ Nível '+game.level+' | 🪙 '+game.gold+' ouro | ⚔ '+game.kills+' tropas | Q '+(game.qCooldown?Math.ceil(game.qCooldown/60)+'s':'pronta')+' | W '+(game.wCooldown?Math.ceil(game.wCooldown/60)+'s':'pronta')+' | E '+(game.cooldowns.e?Math.ceil(game.cooldowns.e/60)+'s':'pronta')+' | R '+(game.level<6?'nível 6':game.cooldowns.r?Math.ceil(game.cooldowns.r/60)+'s':'pronta')+' | 🎒 '+game.inventory.length+'/6'+(game.status.kinds(game.hero,game.tick).length?' | 🌀 '+game.status.kinds(game.hero,game.tick).map(k=>CC_NAMES[k]).join(', '):'')+' | '+game.notice;
  draw();requestAnimationFrame(frame);}
 app.setAttribute('data-version','0.2.0');requestAnimationFrame(frame);
