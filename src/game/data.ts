@@ -25,3 +25,7 @@ export const ITEMS:Item[]=[
 {id:'scepter',name:'Cetro Astral',cost:260,attack:26},{id:'heart',name:'Coração Titânico',cost:290,hp:260}
 ];
 export const physicalDamage=(raw:number,armor:number)=>Math.max(1,Math.round(raw*100/(100+Math.max(0,armor))));
+export const FOUNTAIN_RADIUS=140;
+export const FOUNTAIN_REGEN=0.012;
+export const XP_SHARE_RADIUS=420;
+export const PASSIVE_GOLD_TICKS=60;
