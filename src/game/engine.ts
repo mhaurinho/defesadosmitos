@@ -4,8 +4,9 @@ import {buyItem} from './economy';
 import {allocateTalent,availableTalentPoints,TALENTS,type Path,type TalentState,type Mutation} from './talents';
 import {SKILLS,canCast,type Slot} from './skills';
 import {ELEMENTS,react,type Effect} from './reactions';
+import {collectRune,environment,spawnRune,terrainAt,terrainBonus,visible,type Rune} from './world';
 export class Game {
- effects=new Map<number,Effect[]>();talents:TalentState={path:null,rank:0,points:0}; units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;xp=0;level=1;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;cooldowns:Record<Slot,number>={q:0,w:0,e:0,r:0};
+ runes:Rune[]=[];private runeSeq=0;effects=new Map<number,Effect[]>();talents:TalentState={path:null,rank:0,points:0}; units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;xp=0;level=1;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;cooldowns:Record<Slot,number>={q:0,w:0,e:0,r:0};
  destination={x:170,y:300};private nextId=0;private role:Role='curupira';
  constructor(role:Role='curupira'){this.reset(role);}
  private spawn(team:Team,kind:Unit['kind'],x:number,y:number,stats:Partial<Unit>):Unit{
@@ -13,7 +14,7 @@ export class Game {
  this.units.push(u);return u;
  }
  reset(role:Role=this.role){
- this.role=role;this.effects.clear();this.talents={path:null,rank:0,points:0};this.units=[];this.nextId=0;this.inventory=[];this.gold=0;this.xp=0;this.level=1;this.kills=0;this.tick=0;this.winner=null;this.notice='';this.qCooldown=0;this.wCooldown=0;this.cooldowns={q:0,w:0,e:0,r:0};
+ this.role=role;this.runes=[];this.runeSeq=0;this.effects.clear();this.talents={path:null,rank:0,points:0};this.units=[];this.nextId=0;this.inventory=[];this.gold=0;this.xp=0;this.level=1;this.kills=0;this.tick=0;this.winner=null;this.notice='';this.qCooldown=0;this.wCooldown=0;this.cooldowns={q:0,w:0,e:0,r:0};
  const s=HEROES[role];this.hero=this.spawn('blue','hero',170,300,{role,hp:s.hp,maxHp:s.hp,mana:s.mana,maxMana:s.mana,attack:s.attack,armor:s.armor,range:s.range,speed:s.speed,radius:18});
  const allied=BLUE_TEAM.filter(r=>r!==role).slice(0,4);
  // Seleção livre: o herói escolhido substitui o primeiro slot da composição original.
@@ -76,7 +77,7 @@ export class Game {
  this.notice=skill.name+(skill.ultimate?' — ULTIMATE!':'');
  }
  private distance(a:Unit,b:Unit){return Math.hypot(a.x-b.x,a.y-b.y);}
- private moveUnit(u:Unit,x:number,y:number){const d=Math.hypot(x-u.x,y-u.y);if(d>0.5){const n=Math.min(u.speed,d);u.x+=(x-u.x)/d*n;u.y+=(y-u.y)/d*n;}}
+ private moveUnit(u:Unit,x:number,y:number){const d=Math.hypot(x-u.x,y-u.y);if(d>0.5){const bonus=terrainBonus(u.role,terrainAt(u.x,u.y),environment(this.tick).phase);const n=Math.min(u.speed*bonus.speed,d);u.x+=(x-u.x)/d*n;u.y+=(y-u.y)/d*n;}}
  private hit(target:Unit,raw:number,source:Unit,magic=false){
  if(!target.alive)return;target.hp=Math.max(0,target.hp-(magic?raw:physicalDamage(raw,target.armor)));
  if(target.hp>0)return;
@@ -89,6 +90,9 @@ export class Game {
  private wave(){for(const team of ['blue','red'] as const)for(let i=0;i<3;i++)this.spawn(team,'minion',team==='blue'?110-i*20:990+i*20,280+i*20,{hp:85,maxHp:85,attack:11,armor:1,range:38,speed:0.8,radius:10});}
  step(){
  if(this.winner)return;this.tick++;
+ const spawned=spawnRune(this.tick,++this.runeSeq);if(spawned)this.runes.push(spawned);
+ this.runes=this.runes.filter(r=>r.expiresAt>this.tick);
+ for(const rune of [...this.runes]){const collector=this.units.find(u=>u.alive&&u.kind==='hero'&&Math.hypot(u.x-rune.x,u.y-rune.y)<u.radius+15);if(collector){this.notice=collector.role+' coletou: '+collectRune(collector,rune);this.runes=this.runes.filter(r=>r.id!==rune.id);}}
  if(this.tick%260===1)this.wave();
  for(const slot of ['q','w','e','r'] as const)if(this.cooldowns[slot]>0)this.cooldowns[slot]--;
  this.qCooldown=this.cooldowns.q;this.wCooldown=this.cooldowns.w;
@@ -96,13 +100,13 @@ export class Game {
  if(!u.alive){if(u.kind==='hero'&&u.respawn>0){u.respawn--;if(u.respawn===0){u.alive=true;u.hp=u.maxHp;u.mana=u.maxMana;u.x=u.team==='blue'?170:930;u.y=300;this.notice=u.team==='blue'?'Você renasceu!':'O rival renasceu!';}}continue;}
  if(u.cooldown>0)u.cooldown--;
  if(u.kind==='hero'){u.mana=Math.min(u.maxMana,u.mana+0.08);if(u.team==='blue')this.moveUnit(u,this.destination.x,this.destination.y);}
- const enemies=this.units.filter(v=>v.alive&&v.team!==u.team);
+ const enemies=this.units.filter(v=>v.alive&&v.team!==u.team&&visible(u,v,this.tick));
  if(!enemies.length||u.kind==='core')continue;
  const decision=decideBot(u,enemies);
  if(u.kind==='hero'&&u.id!==this.hero.id)this.moveUnit(u,decision.x,decision.y);
  if(u.kind==='minion')this.moveUnit(u,decision.x,decision.y);
  const target=enemies.sort((a,b)=>this.distance(u,a)-this.distance(u,b))[0];
- if(u.attack>0&&target&&this.distance(u,target)<=u.range+target.radius&&u.cooldown===0){this.hit(target,u.attack,u);u.cooldown=u.kind==='tower'?35:u.kind==='hero'?29:50;}
+ if(u.attack>0&&target&&this.distance(u,target)<=u.range+target.radius&&u.cooldown===0){const terrain=terrainBonus(u.role,terrainAt(u.x,u.y),environment(this.tick).phase);this.hit(target,Math.round(u.attack*terrain.damage),u);u.cooldown=u.kind==='tower'?35:u.kind==='hero'?29:50;}
  }
  this.units=this.units.filter(u=>u.alive||u.kind==='hero'||u.kind==='core'||u.kind==='tower');
  }
