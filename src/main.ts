@@ -2,6 +2,7 @@ import {Game} from './game/engine';
 import {HEROES,ITEMS,type Role} from './game/data';
 import {TALENTS} from './game/talents';
 import {SKILLS,type Slot} from './game/skills';
+import {environment,terrainAt} from './game/world';
 const game=new Game();
 const canvas=document.querySelector<HTMLCanvasElement>('#game')!;
 const ctx=canvas.getContext('2d')!;
@@ -27,7 +28,15 @@ function draw(){
  const W=canvas.width,H=canvas.height;
  ctx.fillStyle='#14251e';ctx.fillRect(0,0,W,H);
  for(let x=0;x<W;x+=50)for(let y=0;y<H;y+=50){ctx.fillStyle=(x+y)%100===0?'#193125':'#1d3328';ctx.fillRect(x+1,y+1,48,48);}
+ // Zonas de terreno, com indicação visual dos biomas.
+ ctx.fillStyle='#194c68';ctx.fillRect(475,65,150,470);
+ ctx.fillStyle='#24523b';ctx.fillRect(190,0,230,225);ctx.fillRect(680,375,230,225);
+ ctx.fillStyle='#8c9da055';ctx.fillRect(310,380,180,220);ctx.fillRect(610,0,180,210);
  ctx.fillStyle='#5b5947';ctx.fillRect(0,245,W,110);ctx.fillStyle='#75684c';ctx.fillRect(0,280,W,40);
+ for(const rune of game.runes){ctx.beginPath();ctx.fillStyle='#e9bd51';ctx.arc(rune.x,rune.y,14,0,Math.PI*2);ctx.fill();ctx.fillStyle='#222';ctx.textAlign='center';ctx.font='bold 14px system-ui';ctx.fillText('✦',rune.x,rune.y+5);}
+ const world=environment(game.tick);
+ if(world.phase==='night'){ctx.fillStyle='rgba(3,9,32,0.38)';ctx.fillRect(0,0,W,H);}
+ else if(world.phase==='dusk'){ctx.fillStyle='rgba(56,23,64,0.18)';ctx.fillRect(0,0,W,H);}
  ctx.strokeStyle='#e3c77b';ctx.lineWidth=2;ctx.beginPath();ctx.arc(game.destination.x,game.destination.y,12,0,Math.PI*2);ctx.stroke();
  for(const u of game.units){if(!u.alive)continue;
  ctx.beginPath();ctx.fillStyle=u.team==='blue'?'#438cda':'#d44d55';ctx.arc(u.x,u.y,u.radius,0,Math.PI*2);ctx.fill();
@@ -44,6 +53,6 @@ function draw(){
 const STEP=1000/60;let last=0,accumulator=0;
 function frame(now:number){if(!last)last=now;accumulator+=Math.min(250,now-last);last=now;let loops=0;while(accumulator>=STEP&&loops++<8){game.step();accumulator-=STEP;}
  passive.textContent='✨ Q '+SKILLS[game.hero.role!].q.name+' · W '+SKILLS[game.hero.role!].w.name+' · E '+SKILLS[game.hero.role!].e.name+' · R '+SKILLS[game.hero.role!].r.name+' | Passiva: '+TALENTS[game.hero.role!].passive.name+' | Talentos: '+game.talents.points+' pontos | Ramo: '+(game.talents.path??'livre')+' '+game.talents.rank+'/3';
- hud.textContent='❤️ '+Math.ceil(game.hero.hp)+'/'+game.hero.maxHp+' | 🔮 '+Math.floor(game.hero.mana)+' | ⭐ Nível '+game.level+' | 🪙 '+game.gold+' ouro | ⚔ '+game.kills+' tropas | Q '+(game.qCooldown?Math.ceil(game.qCooldown/60)+'s':'pronta')+' | W '+(game.wCooldown?Math.ceil(game.wCooldown/60)+'s':'pronta')+' | E '+(game.cooldowns.e?Math.ceil(game.cooldowns.e/60)+'s':'pronta')+' | R '+(game.level<6?'nível 6':game.cooldowns.r?Math.ceil(game.cooldowns.r/60)+'s':'pronta')+' | 🎒 '+game.inventory.length+'/6 | '+game.notice;
+ hud.textContent='🕒 '+environment(game.tick).clock+' '+environment(game.tick).phase+' | 🌿 '+terrainAt(game.hero.x,game.hero.y)+' | ❤️ '+Math.ceil(game.hero.hp)+'/'+game.hero.maxHp+' | 🔮 '+Math.floor(game.hero.mana)+' | ⭐ Nível '+game.level+' | 🪙 '+game.gold+' ouro | ⚔ '+game.kills+' tropas | Q '+(game.qCooldown?Math.ceil(game.qCooldown/60)+'s':'pronta')+' | W '+(game.wCooldown?Math.ceil(game.wCooldown/60)+'s':'pronta')+' | E '+(game.cooldowns.e?Math.ceil(game.cooldowns.e/60)+'s':'pronta')+' | R '+(game.level<6?'nível 6':game.cooldowns.r?Math.ceil(game.cooldowns.r/60)+'s':'pronta')+' | 🎒 '+game.inventory.length+'/6 | '+game.notice;
  draw();requestAnimationFrame(frame);}
 app.setAttribute('data-version','0.2.0');requestAnimationFrame(frame);
