@@ -1,10 +1,10 @@
-import {describe,expect,test} from 'vitest';
+import {describe,expect,test,vi} from 'vitest';
 import {Game} from '../src/game/engine';
-import {decideBot} from '../src/game/bots';
+import {decideBot,decideBotCast} from '../src/game/bots';
 import {buyItem} from '../src/game/economy';
 import {HEROES,ITEMS,physicalDamage,type Unit} from '../src/game/data';
 
-const unit=(over:Partial<Unit>):Unit=>({id:1,team:'red',kind:'hero',x:500,y:300,hp:100,maxHp:100,mana:0,maxMana:0,attack:10,armor:0,range:40,speed:1,radius:18,cooldown:0,alive:true,respawn:0,...over});
+const unit=(over:Partial<Unit>):Unit=>({id:1,team:'red',kind:'hero',x:500,y:300,hp:100,maxHp:100,mana:0,maxMana:0,attack:10,armor:0,range:40,speed:1,radius:18,cooldown:0,alive:true,respawn:0,level:1,xp:0,...over});
 
 describe('dano',()=>{
  test('armadura reduz dano físico e nunca zera',()=>{
@@ -61,7 +61,7 @@ describe('economia e progressão',()=>{
   other.hp=1;(g as any).hit(other,50,g.hero);
   expect(g.gold).toBe(30);expect(g.kills).toBe(1);
  });
- test('XP apenas dentro do raio de compartilhamento',()=>{
+ test('XP só dentro do raio e dividida entre heróis próximos',()=>{
   const g=new Game();
   g.step();
   const far=g.units.find(u=>u.kind==='minion'&&u.team==='red')!;
@@ -69,7 +69,12 @@ describe('economia e progressão',()=>{
   expect(g.xp).toBe(0);
   const near=g.units.find(u=>u.kind==='minion'&&u.team==='red'&&u.alive)!;
   near.x=g.hero.x+50;near.y=g.hero.y;near.hp=1;(g as any).hit(near,50,g.hero);
-  expect(g.xp).toBe(20);
+  // Os 5 heróis azuis estão na base: os 20 de XP são divididos entre eles.
+  expect(g.xp).toBe(4);
+  for(const ally of g.units)if(ally.kind==='hero'&&ally.team==='blue'&&ally!==g.hero)ally.x=900;
+  const solo=g.units.find(u=>u.kind==='minion'&&u.team==='red'&&u.alive)!;
+  solo.x=g.hero.x+50;solo.y=g.hero.y;solo.hp=1;(g as any).hit(solo,50,g.hero);
+  expect(g.xp).toBe(24);
  });
  test('XP acumulada sobe vários níveis de uma vez',()=>{
   const g=new Game();
@@ -95,12 +100,48 @@ describe('economia e progressão',()=>{
  });
 });
 
+describe('bots com habilidades',()=>{
+ const cds=()=>({q:0,w:0,e:0,r:0});
+ test('usa dano em área quando um herói inimigo está no raio',()=>{
+  const bot=unit({role:'boitata',mana:300,maxMana:300});
+  const enemy=unit({id:2,team:'blue',x:560});
+  expect(decideBotCast(bot,decideBot(bot,[enemy]),[enemy],[bot],cds())?.slot).toBe('q');
+ });
+ test('não lança nada sem alvo nem aliado ferido',()=>{
+  const bot=unit({role:'boitata',mana:300,maxMana:300});
+  expect(decideBotCast(bot,decideBot(bot,[]),[],[bot],cds())).toBeNull();
+ });
+ test('cura aliado ferido no raio',()=>{
+  const bot=unit({role:'boto',mana:300,maxMana:300});
+  const ally=unit({id:3,x:540,hp:30});
+  expect(decideBotCast(bot,decideBot(bot,[]),[],[bot,ally],cds())?.slot).toBe('w');
+ });
+ test('respeita mana, recarga e ultimate no nível 6',()=>{
+  const enemies=[unit({id:2,team:'blue',x:560}),unit({id:3,team:'blue',x:540})];
+  const low=unit({role:'boitata',mana:10,maxMana:300});
+  expect(decideBotCast(low,decideBot(low,enemies),enemies,[low],cds())).toBeNull();
+  const lvl1=unit({role:'boitata',mana:300,maxMana:300});
+  expect(decideBotCast(lvl1,decideBot(lvl1,enemies),enemies,[lvl1],{q:5,w:5,e:5,r:0})).toBeNull();
+  const lvl6=unit({role:'boitata',mana:300,maxMana:300,level:6});
+  expect(decideBotCast(lvl6,decideBot(lvl6,enemies),enemies,[lvl6],cds())?.slot).toBe('r');
+ });
+ test('bots lançam habilidades e sobem de nível numa partida simulada',()=>{
+  const g=new Game();
+  const castFor=vi.spyOn(g as any,'castFor');
+  for(let i=0;i<60*60*2;i++)g.step();
+  const botCasters=new Set(castFor.mock.calls.map(([caster])=>(caster as Unit).id));
+  expect(botCasters.size).toBeGreaterThanOrEqual(5);
+  expect(botCasters.has(g.hero.id)).toBe(false);
+  expect(g.units.filter(u=>u.kind==='hero'&&u!==g.hero).some(b=>b.level>1)).toBe(true);
+ });
+});
+
 describe('partida',()=>{
  test('tropas avançam pela rota mesmo sem inimigo à vista',()=>{
   const g=new Game();
-  for(let i=0;i<400;i++)g.step();
-  const blue=g.units.filter(u=>u.kind==='minion'&&u.team==='blue');
-  expect(Math.max(...blue.map(u=>u.x))).toBeGreaterThan(300);
+  let farthest=0;
+  for(let i=0;i<400;i++){g.step();for(const u of g.units)if(u.kind==='minion'&&u.team==='blue')farthest=Math.max(farthest,u.x);}
+  expect(farthest).toBeGreaterThan(300);
  });
  test('partida com jogador parado chega a um desfecho de rota (tropas não se acumulam)',()=>{
   const g=new Game();
