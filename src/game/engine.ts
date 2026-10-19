@@ -2,8 +2,9 @@ import {HEROES,BLUE_TEAM,RED_TEAM,physicalDamage,type Unit,type Team,type Role,t
 import {decideBot} from './bots';
 import {buyItem} from './economy';
 import {allocateTalent,availableTalentPoints,type Path,type TalentState} from './talents';
+import {SKILLS,canCast,type Slot} from './skills';
 export class Game {
- talents:TalentState={path:null,rank:0,points:0}; units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;xp=0;level=1;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;
+ talents:TalentState={path:null,rank:0,points:0}; units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;xp=0;level=1;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;cooldowns:Record<Slot,number>={q:0,w:0,e:0,r:0};
  destination={x:170,y:300};private nextId=0;private role:Role='curupira';
  constructor(role:Role='curupira'){this.reset(role);}
  private spawn(team:Team,kind:Unit['kind'],x:number,y:number,stats:Partial<Unit>):Unit{
@@ -11,7 +12,7 @@ export class Game {
  this.units.push(u);return u;
  }
  reset(role:Role=this.role){
- this.role=role;this.talents={path:null,rank:0,points:0};this.units=[];this.nextId=0;this.inventory=[];this.gold=0;this.xp=0;this.level=1;this.kills=0;this.tick=0;this.winner=null;this.notice='';this.qCooldown=0;this.wCooldown=0;
+ this.role=role;this.talents={path:null,rank:0,points:0};this.units=[];this.nextId=0;this.inventory=[];this.gold=0;this.xp=0;this.level=1;this.kills=0;this.tick=0;this.winner=null;this.notice='';this.qCooldown=0;this.wCooldown=0;this.cooldowns={q:0,w:0,e:0,r:0};
  const s=HEROES[role];this.hero=this.spawn('blue','hero',170,300,{role,hp:s.hp,maxHp:s.hp,mana:s.mana,maxMana:s.mana,attack:s.attack,armor:s.armor,range:s.range,speed:s.speed,radius:18});
  const allied=BLUE_TEAM.filter(r=>r!==role).slice(0,4);
  // Seleção livre: o herói escolhido substitui o primeiro slot da composição original.
@@ -29,14 +30,26 @@ export class Game {
  move(x:number,y:number){this.destination={x:Math.max(20,Math.min(1080,x)),y:Math.max(40,Math.min(560,y))};}
  chooseTalent(path:Path){const result=allocateTalent(this.hero,this.talents,path);this.notice=result.message;return result.ok;}
  buy(id:string){if(!this.hero.alive)return;const result=buyItem(id,this.gold,this.inventory,this.hero);this.gold=result.gold;this.inventory=result.inventory;this.notice=result.message;}
- cast(slot:'q'|'w'){
+ cast(slot:Slot){
  if(!this.hero.alive||this.winner)return;
- if(slot==='q'&&this.qCooldown===0&&this.hero.mana>=45){
- this.hero.mana-=45;this.qCooldown=150;
- for(const target of [...this.units])if(target.alive&&target.team==='red'&&this.distance(this.hero,target)<160)this.hit(target,45+this.level*9,this.hero,true);
- this.notice='Explosão mítica!';
+ const check=canCast(this.hero,slot,this.cooldowns,this.level);
+ if(!check.ok){this.notice=check.reason;return;}
+ const skill=SKILLS[this.hero.role!][slot];
+ this.hero.mana-=skill.cost;this.cooldowns[slot]=skill.cooldown;
+ const rankBonus=this.talents.path==='aggressive'?1+this.talents.rank*0.08:1;
+ const supportBonus=this.talents.path==='guardian'?1+this.talents.rank*0.08:1;
+ if(skill.kind==='burst'||skill.kind==='control'){
+  for(const target of [...this.units])if(target.alive&&target.team==='red'&&this.distance(this.hero,target)<skill.radius+target.radius)this.hit(target,Math.round((skill.power+this.level*4)*rankBonus),this.hero,true);
+ }else if(skill.kind==='heal'){
+  for(const ally of this.units)if(ally.alive&&ally.team==='blue'&&(skill.radius===0?ally.id===this.hero.id:this.distance(this.hero,ally)<skill.radius))ally.hp=Math.min(ally.maxHp,ally.hp+Math.round((skill.power+this.level*5)*supportBonus));
+ }else if(skill.kind==='guard'){
+  this.hero.hp=Math.min(this.hero.maxHp,this.hero.hp+Math.round(skill.power*supportBonus));
+ }else if(skill.kind==='dash'){
+  const dx=this.destination.x-this.hero.x,dy=this.destination.y-this.hero.y,d=Math.hypot(dx,dy);
+  if(d>1){const step=Math.min(d,skill.power);this.hero.x=Math.max(20,Math.min(1080,this.hero.x+dx/d*step));this.hero.y=Math.max(40,Math.min(560,this.hero.y+dy/d*step));}
  }
- if(slot==='w'&&this.wCooldown===0&&this.hero.mana>=35){this.hero.mana-=35;this.wCooldown=230;this.hero.hp=Math.min(this.hero.maxHp,this.hero.hp+85+this.level*14);this.notice='Cura ancestral!';}
+ this.qCooldown=this.cooldowns.q;this.wCooldown=this.cooldowns.w;
+ this.notice=skill.name+(skill.ultimate?' — ULTIMATE!':'');
  }
  private distance(a:Unit,b:Unit){return Math.hypot(a.x-b.x,a.y-b.y);}
  private moveUnit(u:Unit,x:number,y:number){const d=Math.hypot(x-u.x,y-u.y);if(d>0.5){const n=Math.min(u.speed,d);u.x+=(x-u.x)/d*n;u.y+=(y-u.y)/d*n;}}
@@ -53,7 +66,8 @@ export class Game {
  step(){
  if(this.winner)return;this.tick++;
  if(this.tick%260===1)this.wave();
- if(this.qCooldown>0)this.qCooldown--;if(this.wCooldown>0)this.wCooldown--;
+ for(const slot of ['q','w','e','r'] as const)if(this.cooldowns[slot]>0)this.cooldowns[slot]--;
+ this.qCooldown=this.cooldowns.q;this.wCooldown=this.cooldowns.w;
  for(const u of this.units){
  if(!u.alive){if(u.kind==='hero'&&u.respawn>0){u.respawn--;if(u.respawn===0){u.alive=true;u.hp=u.maxHp;u.mana=u.maxMana;u.x=u.team==='blue'?170:930;u.y=300;this.notice=u.team==='blue'?'Você renasceu!':'O rival renasceu!';}}continue;}
  if(u.cooldown>0)u.cooldown--;
