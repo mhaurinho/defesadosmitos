@@ -1,4 +1,4 @@
-import {HEROES,BLUE_TEAM,RED_TEAM,physicalDamage,type Unit,type Team,type Role,type Item} from './data';
+import {HEROES,BLUE_TEAM,RED_TEAM,FOUNTAIN_RADIUS,FOUNTAIN_REGEN,PASSIVE_GOLD_TICKS,XP_SHARE_RADIUS,physicalDamage,type Unit,type Team,type Role,type Item} from './data';
 import {decideBot} from './bots';
 import {buyItem} from './economy';
 import {allocateTalent,availableTalentPoints,TALENTS,type Path,type TalentState,type Mutation} from './talents';
@@ -19,7 +19,8 @@ export class Game {
  const allied=BLUE_TEAM.filter(r=>r!==role).slice(0,4);
  // Seleção livre: o herói escolhido substitui o primeiro slot da composição original.
  const enemyRoles=RED_TEAM.filter(r=>r!==role);
- while(enemyRoles.length<5){const candidate=BLUE_TEAM.find(r=>r!==role&&!enemyRoles.includes(r));if(!candidate)break;enemyRoles.push(candidate);}
+ // Completa o time vermelho com quem sobrou do azul, sem repetir aliados nem o escolhido.
+ while(enemyRoles.length<5){const candidate=BLUE_TEAM.find(r=>r!==role&&!enemyRoles.includes(r)&&!allied.includes(r));if(!candidate)break;enemyRoles.push(candidate);}
  for(const [i,r] of allied.entries()){const b=HEROES[r];this.spawn('blue','hero',155+i*22,230+i*36,{role:r,hp:b.hp,maxHp:b.hp,mana:b.mana,maxMana:b.mana,attack:b.attack,armor:b.armor,range:b.range,speed:b.speed,radius:18});}
  for(const [i,r] of enemyRoles.entries()){const b=HEROES[r];const enemy=this.spawn('red','hero',925-i*22,230+i*36,{role:r,hp:b.hp,maxHp:b.hp,mana:b.mana,maxMana:b.mana,attack:b.attack,armor:b.armor,range:b.range,speed:b.speed,radius:18});if(i===0)this.bot=enemy;}
 
@@ -83,9 +84,16 @@ export class Game {
  if(target.hp>0)return;
  target.alive=false;
  if(target.kind==='core'){this.winner=source.team;this.notice=source.team==='blue'?'Vitória!':'Derrota!';}
- if(target.team==='red'&&source.team==='blue'){this.gold+=target.kind==='minion'?30:target.kind==='hero'?120:target.kind==='tower'?170:0;this.xp+=target.kind==='minion'?20:target.kind==='hero'?90:70;if(target.kind==='minion')this.kills++;
- if(this.xp>=this.level*100){this.xp-=this.level*100;this.level++;this.talents.points=availableTalentPoints(this.level)-this.talents.rank;this.hero.maxHp+=35;this.hero.hp=Math.min(this.hero.maxHp,this.hero.hp+70);this.hero.attack+=5;this.notice='Nível '+this.level+'!';}}
+ if(target.team==='red'){
+ // Ouro só no último golpe do herói; torre derrubada paga o time inteiro. XP é compartilhada por proximidade.
+ if(source===this.hero){this.gold+=target.kind==='minion'?30:target.kind==='hero'?120:0;if(target.kind==='minion')this.kills++;}
+ if(target.kind==='tower')this.gold+=170;
+ if(this.hero.alive&&this.distance(this.hero,target)<=XP_SHARE_RADIUS)this.gainXp(target.kind==='minion'?20:target.kind==='hero'?90:70);}
  if(target.kind==='hero')target.respawn=180;
+ }
+ private gainXp(amount:number){
+ this.xp+=amount;
+ while(this.xp>=this.level*100){this.xp-=this.level*100;this.level++;this.talents.points=availableTalentPoints(this.level)-this.talents.rank;this.hero.maxHp+=35;this.hero.hp=Math.min(this.hero.maxHp,this.hero.hp+70);this.hero.attack+=5;this.notice='Nível '+this.level+'!';}
  }
  private wave(){for(const team of ['blue','red'] as const)for(let i=0;i<3;i++)this.spawn(team,'minion',team==='blue'?110-i*20:990+i*20,280+i*20,{hp:85,maxHp:85,attack:11,armor:1,range:38,speed:0.8,radius:10});}
  step(){
@@ -96,15 +104,20 @@ export class Game {
  if(this.tick%260===1)this.wave();
  for(const slot of ['q','w','e','r'] as const)if(this.cooldowns[slot]>0)this.cooldowns[slot]--;
  this.qCooldown=this.cooldowns.q;this.wCooldown=this.cooldowns.w;
+ if(this.tick%PASSIVE_GOLD_TICKS===0)this.gold++;
  for(const u of this.units){
- if(!u.alive){if(u.kind==='hero'&&u.respawn>0){u.respawn--;if(u.respawn===0){u.alive=true;u.hp=u.maxHp;u.mana=u.maxMana;u.x=u.team==='blue'?170:930;u.y=300;this.notice=u.team==='blue'?'Você renasceu!':'O rival renasceu!';}}continue;}
+ if(!u.alive){if(u.kind==='hero'&&u.respawn>0){u.respawn--;if(u.respawn===0){u.alive=true;u.hp=u.maxHp;u.mana=u.maxMana;u.x=u.team==='blue'?170:930;u.y=300;if(u===this.hero)this.destination={x:u.x,y:u.y};if(u===this.hero)this.notice='Você renasceu!';}}continue;}
  if(u.cooldown>0)u.cooldown--;
- if(u.kind==='hero'){u.mana=Math.min(u.maxMana,u.mana+0.08);if(u.team==='blue')this.moveUnit(u,this.destination.x,this.destination.y);}
+ if(u.kind==='hero'){u.mana=Math.min(u.maxMana,u.mana+0.08);
+ const fountainX=u.team==='blue'?100:1000;
+ if(Math.hypot(fountainX-u.x,300-u.y)<FOUNTAIN_RADIUS){u.hp=Math.min(u.maxHp,u.hp+u.maxHp*FOUNTAIN_REGEN);u.mana=Math.min(u.maxMana,u.mana+u.maxMana*FOUNTAIN_REGEN);}if(u===this.hero)this.moveUnit(u,this.destination.x,this.destination.y);}
  const enemies=this.units.filter(v=>v.alive&&v.team!==u.team&&visible(u,v,this.tick));
- if(!enemies.length||u.kind==='core')continue;
+ if(u.kind==='core')continue;
+ // Sem inimigo visível a unidade continua avançando pela rota; a visão só limita alvos.
  const decision=decideBot(u,enemies);
  if(u.kind==='hero'&&u.id!==this.hero.id)this.moveUnit(u,decision.x,decision.y);
  if(u.kind==='minion')this.moveUnit(u,decision.x,decision.y);
+ if(!enemies.length)continue;
  const target=enemies.sort((a,b)=>this.distance(u,a)-this.distance(u,b))[0];
  if(u.attack>0&&target&&this.distance(u,target)<=u.range+target.radius&&u.cooldown===0){const terrain=terrainBonus(u.role,terrainAt(u.x,u.y),environment(this.tick).phase);this.hit(target,Math.round(u.attack*terrain.damage),u);u.cooldown=u.kind==='tower'?35:u.kind==='hero'?29:50;}
  }

@@ -17,6 +17,12 @@ npm run dev
 
 Abra o endereço local exibido pelo Vite.
 
+Testes de regras (dano, loja, bot, economia, partida e determinismo):
+
+```bash
+npm test
+```
+
 ### Comandos
 - Clique no mapa: movimentar herói.
 - **Q**: explosão de dano em área (cooldown).
