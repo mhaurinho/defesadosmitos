@@ -1,23 +1,24 @@
 import type {Role,Unit} from './data';
 export type Path='aggressive'|'guardian';
-export interface Talent {name:string;description:string;attack?:number;hp?:number;armor?:number;speed?:number;mana?:number}
+export type Mutation='echo'|'chain'|'execute'|'burn'|'curse'|'mark'|'lifesteal'|'pierce'|'silence'|'quake'|'relay'|'root'|'tide'|'aura'|'ward'|'bond'|'rescue'|'shield'|'veil'|'fortify';
+export interface Talent {name:string;description:string;mutation:Mutation}
 export interface HeroTalent {passive:{name:string;description:string};aggressive:Talent[];guardian:Talent[]}
-const paths=(passive:string,desc:string,attack:string,defense:string):HeroTalent=>({
- passive:{name:passive,description:desc},
- aggressive:[{name:attack+' I',description:'+8 ataque',attack:8},{name:attack+' II',description:'+12 ataque',attack:12},{name:attack+' III',description:'+18 ataque',attack:18}],
- guardian:[{name:defense+' I',description:'+75 vida',hp:75},{name:defense+' II',description:'+5 armadura',armor:5},{name:defense+' III',description:'+125 vida e +3 armadura',hp:125,armor:3}]
+const make=(passive:string,description:string,off:[string,string,Mutation],def:[string,string,Mutation]):HeroTalent=>({
+ passive:{name:passive,description},
+ aggressive:[{name:off[0],description:off[1],mutation:off[2]},{name:'Ressonância de '+off[0],description:'Amplia o efeito de mutação da habilidade.',mutation:off[2]},{name:'Apoteose de '+off[0],description:'Amplia novamente a mutação e reforça a sinergia.',mutation:off[2]}],
+ guardian:[{name:def[0],description:def[1],mutation:def[2]},{name:'Ressonância de '+def[0],description:'Amplia o efeito de proteção ou utilidade.',mutation:def[2]},{name:'Apoteose de '+def[0],description:'Amplia novamente a proteção e o jogo em equipe.',mutation:def[2]}]
 });
 export const TALENTS:Record<Role,HeroTalent>={
- saci:paths('Astúcia do Redemoinho','Mobilidade elevada e estilo evasivo.','Travessura Mortal','Fuga Ilusória'),
- curupira:paths('Guardião da Mata','Resistência natural ao proteger a floresta.','Vingança Verde','Raízes Protetoras'),
- iara:paths('Voz Encantadora','Magia das águas fortalece sua presença.','Canto Devastador','Maré Restauradora'),
- boitata:paths('Corpo Incandescente','Fogo ancestral emana da serpente.','Chama Voraz','Escamas Eternas'),
- cuca:paths('Mestra dos Sonhos','A feitiçaria se alimenta de ilusões.','Pesadelo Cruel','Caldeirão Protetor'),
- boto:paths('Encanto das Águas','A presença do boto inspira aliados.','Correnteza Ofensiva','Benção do Rio'),
- mula:paths('Galope Ardente','Investidas aceleram o ritmo do combate.','Coice Incendiário','Couraça de Brasa'),
- caipora:paths('Pacto Selvagem','A fauna responde à protetora.','Caçada Implacável','Abrigo da Mata'),
- matinta:paths('Presságio Noturno','Seu assobio anuncia a noite.','Agouro Fatal','Asas Protetoras'),
- mapinguari:paths('Pele Ancestral','O gigante resiste ao avanço inimigo.','Fúria Primordial','Fortaleza da Selva')
+ saci:make('Astúcia do Redemoinho','Manipula a posição do combate.',['Eco Travesso','Q repercute em inimigos próximos.','echo'],['Atalho de Vento','W transporta também um aliado próximo.','relay']),
+ curupira:make('Guardião da Mata','A floresta responde a seus passos.',['Raiz Contagiosa','Q se propaga entre inimigos.','chain'],['Bosque de Refúgio','E protege aliados próximos.','root']),
+ iara:make('Voz Encantadora','O canto governa a correnteza.',['Canto Final','Q causa mais dano em alvos enfraquecidos.','execute'],['Maré Compartilhada','W alcança aliados mais distantes.','tide']),
+ boitata:make('Corpo Incandescente','As chamas marcam o campo.',['Fogo Vivo','Q deixa queimadura persistente.','burn'],['Brasa Guardiã','E fortalece aliados próximos.','aura']),
+ cuca:make('Mestra dos Sonhos','Seus feitiços confundem a realidade.',['Pesadelo Recorrente','Q enfraquece a resistência dos atingidos.','curse'],['Caldeirão Coletivo','W amplia a recuperação dos aliados.','ward']),
+ boto:make('Encanto das Águas','Encantos conectam os companheiros.',['Maré Marcada','Q marca o alvo para receber dano extra.','mark'],['Pacto do Rio','W restaura também mana dos aliados.','bond']),
+ mula:make('Galope Ardente','O impulso gera perigo.',['Fogo de Retorno','Q recupera vida por dano causado.','lifesteal'],['Galope Salvador','W protege um aliado próximo.','rescue']),
+ caipora:make('Pacto Selvagem','A caça conhece todos os caminhos.',['Flecha Transpassante','Q perfura resistências.','pierce'],['Abrigo Animal','W também concede proteção.','shield']),
+ matinta:make('Presságio Noturno','Seu assobio antecipa o perigo.',['Agouro Mudo','Q interrompe temporariamente ataques.','silence'],['Véu Noturno','W protege aliados mais próximos.','veil']),
+ mapinguari:make('Pele Ancestral','Sua presença altera o território.',['Abalo Primordial','Q repercute em uma área maior.','quake'],['Muralha Viva','E concede vida temporária aos aliados.','fortify'])
 };
 export interface TalentState {path:Path|null;rank:number;points:number}
 export function availableTalentPoints(level:number){return Math.floor(level/3);}
@@ -27,9 +28,6 @@ export function allocateTalent(hero:Unit,state:TalentState,path:Path):{ok:boolea
  if(state.path&&state.path!==path)return {ok:false,message:'Especialização já escolhida'};
  if(state.rank>=3)return {ok:false,message:'Ramo completo'};
  const talent=TALENTS[hero.role][path][state.rank];
- hero.attack+=talent.attack??0;hero.armor+=talent.armor??0;hero.speed+=talent.speed??0;
- if(talent.hp){hero.maxHp+=talent.hp;hero.hp+=talent.hp;}
- if(talent.mana){hero.maxMana+=talent.mana;hero.mana+=talent.mana;}
  state.path=path;state.rank++;state.points--;
- return {ok:true,message:'Talento aprendido: '+talent.name};
+ return {ok:true,message:'Mutação ativada: '+talent.name};
 }
