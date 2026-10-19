@@ -1,7 +1,7 @@
 import {HEROES,BLUE_TEAM,RED_TEAM,physicalDamage,type Unit,type Team,type Role,type Item} from './data';
 import {decideBot} from './bots';
 import {buyItem} from './economy';
-import {allocateTalent,availableTalentPoints,type Path,type TalentState} from './talents';
+import {allocateTalent,availableTalentPoints,TALENTS,type Path,type TalentState,type Mutation} from './talents';
 import {SKILLS,canCast,type Slot} from './skills';
 export class Game {
  talents:TalentState={path:null,rank:0,points:0}; units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;xp=0;level=1;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;cooldowns:Record<Slot,number>={q:0,w:0,e:0,r:0};
@@ -36,17 +36,36 @@ export class Game {
  if(!check.ok){this.notice=check.reason;return;}
  const skill=SKILLS[this.hero.role!][slot];
  this.hero.mana-=skill.cost;this.cooldowns[slot]=skill.cooldown;
- const rankBonus=this.talents.path==='aggressive'?1+this.talents.rank*0.08:1;
- const supportBonus=this.talents.path==='guardian'?1+this.talents.rank*0.08:1;
+ const mutation:Mutation|null=this.talents.path?TALENTS[this.hero.role!][this.talents.path][0].mutation:null;
+ const rank=this.talents.rank;
+ const attackMutation=this.talents.path==='aggressive'?mutation:null;
+ const supportMutation=this.talents.path==='guardian'?mutation:null;
+ const rangeBonus=attackMutation==='quake'?40*rank:attackMutation==='chain'?25*rank:0;
  if(skill.kind==='burst'||skill.kind==='control'){
-  for(const target of [...this.units])if(target.alive&&target.team==='red'&&this.distance(this.hero,target)<skill.radius+target.radius)this.hit(target,Math.round((skill.power+this.level*4)*rankBonus),this.hero,true);
+  for(const target of [...this.units])if(target.alive&&target.team==='red'&&this.distance(this.hero,target)<skill.radius+rangeBonus+target.radius){
+   const low=target.hp/target.maxHp<0.4;
+   const mult=attackMutation==='execute'&&low?1+0.3*rank:attackMutation==='pierce'?1+0.12*rank:attackMutation==='echo'?1+0.1*rank:1;
+   const dealt=Math.round((skill.power+this.level*4)*mult);
+   this.hit(target,dealt,this.hero,true);
+   if(attackMutation==='lifesteal')this.hero.hp=Math.min(this.hero.maxHp,this.hero.hp+Math.round(dealt*0.15*rank));
+   if(attackMutation==='burn')this.hit(target,Math.round(12*rank),this.hero,true);
+   if(attackMutation==='curse')target.armor=Math.max(0,target.armor-rank);
+   if(attackMutation==='mark')this.hit(target,10*rank,this.hero,true);
+   if(attackMutation==='silence')target.cooldown=Math.max(target.cooldown,20*rank);
+  }
  }else if(skill.kind==='heal'){
-  for(const ally of this.units)if(ally.alive&&ally.team==='blue'&&(skill.radius===0?ally.id===this.hero.id:this.distance(this.hero,ally)<skill.radius))ally.hp=Math.min(ally.maxHp,ally.hp+Math.round((skill.power+this.level*5)*supportBonus));
+  for(const ally of this.units)if(ally.alive&&ally.team==='blue'&&(skill.radius===0?ally.id===this.hero.id:this.distance(this.hero,ally)<skill.radius+(supportMutation==='tide'?45*rank:0))) {
+   ally.hp=Math.min(ally.maxHp,ally.hp+Math.round(skill.power+this.level*5));
+   if(supportMutation==='bond')ally.mana=Math.min(ally.maxMana,ally.mana+15*rank);
+   if(supportMutation==='shield'||supportMutation==='veil')ally.hp=Math.min(ally.maxHp,ally.hp+20*rank);
+  }
  }else if(skill.kind==='guard'){
-  this.hero.hp=Math.min(this.hero.maxHp,this.hero.hp+Math.round(skill.power*supportBonus));
+  this.hero.hp=Math.min(this.hero.maxHp,this.hero.hp+Math.round(skill.power));
+  if(supportMutation==='root'||supportMutation==='aura'||supportMutation==='ward'||supportMutation==='fortify')for(const ally of this.units)if(ally.alive&&ally.team==='blue'&&this.distance(this.hero,ally)<160)ally.hp=Math.min(ally.maxHp,ally.hp+25*rank);
  }else if(skill.kind==='dash'){
   const dx=this.destination.x-this.hero.x,dy=this.destination.y-this.hero.y,d=Math.hypot(dx,dy);
   if(d>1){const step=Math.min(d,skill.power);this.hero.x=Math.max(20,Math.min(1080,this.hero.x+dx/d*step));this.hero.y=Math.max(40,Math.min(560,this.hero.y+dy/d*step));}
+  if(supportMutation==='relay'||supportMutation==='rescue')for(const ally of this.units)if(ally.alive&&ally.team==='blue'&&ally.id!==this.hero.id&&this.distance(this.hero,ally)<110){ally.hp=Math.min(ally.maxHp,ally.hp+20*rank);break;}
  }
  this.qCooldown=this.cooldowns.q;this.wCooldown=this.cooldowns.w;
  this.notice=skill.name+(skill.ultimate?' — ULTIMATE!':'');
