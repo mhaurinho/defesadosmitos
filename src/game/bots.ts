@@ -1,15 +1,29 @@
 import {FOUNTAIN_RADIUS,type Unit} from './data';
 import {SKILLS,canCast,type Slot} from './skills';
-export type BotState='push'|'fight'|'retreat';
-export function decideBot(unit:Unit,enemies:readonly Unit[]):{state:BotState;target?:Unit;x:number;y:number}{
- const candidates=enemies.filter(e=>e.alive&&e.team!==unit.team);
+import {laneTarget} from './lanes';
+export type BotState='push'|'fight'|'retreat'|'hold';
+/** Torre inimiga sem nenhuma tropa aliada dentro do alcance dela: herói IA não deve entrar. */
+export function uncoveredTowers(unit:Unit,enemies:readonly Unit[],allies:readonly Unit[]):Unit[]{
+ return enemies.filter(e=>e.alive&&e.kind==='tower'&&!allies.some(a=>a.alive&&a.kind==='minion'&&Math.hypot(a.x-e.x,a.y-e.y)<e.range));
+}
+export function decideBot(unit:Unit,enemies:readonly Unit[],allies:readonly Unit[]=[]):{state:BotState;target?:Unit;x:number;y:number}{
+ const danger=unit.kind==='hero'?uncoveredTowers(unit,enemies,allies):[];
+ const underTower=(p:{x:number;y:number},margin=0)=>danger.some(t=>Math.hypot(t.x-p.x,t.y-p.y)<t.range+margin);
+ // Heróis IA ignoram alvos protegidos por torre descoberta, mas tropas lutam com tudo.
+ const candidates=enemies.filter(e=>e.alive&&e.team!==unit.team&&(unit.kind!=='hero'||(!danger.includes(e)&&!underTower(e))));
  const nearest=candidates.sort((a,b)=>Math.hypot(a.x-unit.x,a.y-unit.y)-Math.hypot(b.x-unit.x,b.y-unit.y))[0];
  const base={x:unit.team==='blue'?100:1000,y:300};
  const hpRatio=unit.hp/unit.maxHp;
  // Histerese: recua abaixo de 23% e só volta à rota após recuperar 90% na fonte.
  const atBase=Math.hypot(base.x-unit.x,base.y-unit.y)<FOUNTAIN_RADIUS;
  if(unit.kind==='hero'&&(hpRatio<0.23||(atBase&&hpRatio<0.9)))return {state:'retreat',...base};
- if(nearest&&Math.hypot(nearest.x-unit.x,nearest.y-unit.y)<230)return {state:'fight',target:nearest,x:nearest.x,y:nearest.y};
+ // Tropas têm aggro curto para não abandonarem a própria rota.
+ const aggro=unit.kind==='minion'?140:230;
+ if(nearest&&Math.hypot(nearest.x-unit.x,nearest.y-unit.y)<aggro)return {state:'fight',target:nearest,x:nearest.x,y:nearest.y};
+ const lane=laneTarget(unit);
+ const blocking=danger.find(t=>Math.hypot(t.x-unit.x,t.y-unit.y)<t.range+unit.radius+70);
+ if(blocking)return {state:'hold',x:blocking.x+(unit.team==='blue'?-1:1)*(blocking.range+60),y:blocking.y};
+ if(lane)return {state:'push',...lane};
  return {state:'push',x:unit.team==='blue'?1045:55,y:300};
 }
 export type BotDecision=ReturnType<typeof decideBot>;
