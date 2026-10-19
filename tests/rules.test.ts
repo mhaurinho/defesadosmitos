@@ -223,6 +223,13 @@ describe('ritmo e simulação',()=>{
   enemy.level=8;enemy.hp=1;(g as any).hit(enemy,50,g.hero);
   expect(enemy.respawn).toBe(respawnTicks(8));
  });
+ test('morte limpa marcas elementais e controles do alvo',()=>{
+  const g=new Game('iara');const enemy=g.units.find(u=>u.kind==='hero'&&u.team==='red')!;
+  enemy.x=g.hero.x+60;enemy.y=g.hero.y;g.cast('q');
+  expect(g.effects.get(enemy.id)?.length).toBeGreaterThan(0);
+  enemy.hp=1;(g as any).hit(enemy,50,g.hero);
+  expect(g.effects.has(enemy.id)).toBe(false);
+ });
  test('placar registra abate, morte e dano entre heróis',()=>{
   const g=new Game();const enemy=g.units.find(u=>u.kind==='hero'&&u.team==='red')!;
   enemy.hp=40;(g as any).hit(enemy,100,g.hero,true);

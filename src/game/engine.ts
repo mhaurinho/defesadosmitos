@@ -121,7 +121,8 @@ export class Game {
  // XP dividida entre os heróis próximos: lutar em grupo acelera a partida, mas não multiplica a experiência.
  const receivers=xp?this.units.filter(h=>h.alive&&h.kind==='hero'&&h.team!==target.team&&this.distance(h,target)<=XP_SHARE_RADIUS):[];
  for(const h of receivers)this.gainXp(Math.round(xp/receivers.length),h);
- this.status.forget(target);
+ // Mortos perdem controles e marcas elementais; sem isso o mapa de efeitos crescia com cada tropa abatida.
+ this.status.forget(target);this.effects.delete(target.id);
  if(target.kind==='hero')target.respawn=respawnTicks(target.level);
  }
  /** Núcleo só recebe dano depois que as três torres do seu time caem. */
@@ -142,7 +143,7 @@ export class Game {
  if(this.winner)return;this.tick++;
  const spawned=spawnRune(this.tick,++this.runeSeq);if(spawned)this.runes.push(spawned);
  this.runes=this.runes.filter(r=>r.expiresAt>this.tick);
- for(const rune of [...this.runes]){const collector=this.units.find(u=>u.alive&&u.kind==='hero'&&Math.hypot(u.x-rune.x,u.y-rune.y)<u.radius+15);if(collector){this.notice=collector.role+' coletou: '+collectRune(collector,rune);this.runes=this.runes.filter(r=>r.id!==rune.id);}}
+ for(const rune of [...this.runes]){const collector=this.units.find(u=>u.alive&&u.kind==='hero'&&Math.hypot(u.x-rune.x,u.y-rune.y)<u.radius+15);if(collector){this.notice=HEROES[collector.role!].name+' coletou: '+collectRune(collector,rune);this.runes=this.runes.filter(r=>r.id!==rune.id);}}
  if(this.tick%260===1)this.wave();
  for(const cds of this.skillCooldowns.values())for(const slot of ['q','w','e','r'] as const)if(cds[slot]>0)cds[slot]--;
  this.qCooldown=this.cooldowns.q;this.wCooldown=this.cooldowns.w;
