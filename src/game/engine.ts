@@ -1,10 +1,10 @@
-import {HEROES,physicalDamage,type Unit,type Team,type Role,type Item} from './data';
+import {HEROES,BLUE_TEAM,RED_TEAM,physicalDamage,type Unit,type Team,type Role,type Item} from './data';
 import {decideBot} from './bots';
 import {buyItem} from './economy';
 export class Game {
  units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;xp=0;level=1;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;
- destination={x:170,y:300};private nextId=0;private role:Role='guardian';
- constructor(role:Role='guardian'){this.reset(role);}
+ destination={x:170,y:300};private nextId=0;private role:Role='curupira';
+ constructor(role:Role='curupira'){this.reset(role);}
  private spawn(team:Team,kind:Unit['kind'],x:number,y:number,stats:Partial<Unit>):Unit{
  const u:Unit={id:++this.nextId,team,kind,x,y,hp:80,maxHp:80,mana:0,maxMana:0,attack:10,armor:0,range:38,speed:0.8,radius:11,cooldown:0,alive:true,respawn:0,...stats};
  this.units.push(u);return u;
@@ -12,7 +12,13 @@ export class Game {
  reset(role:Role=this.role){
  this.role=role;this.units=[];this.nextId=0;this.inventory=[];this.gold=0;this.xp=0;this.level=1;this.kills=0;this.tick=0;this.winner=null;this.notice='';this.qCooldown=0;this.wCooldown=0;
  const s=HEROES[role];this.hero=this.spawn('blue','hero',170,300,{role,hp:s.hp,maxHp:s.hp,mana:s.mana,maxMana:s.mana,attack:s.attack,armor:s.armor,range:s.range,speed:s.speed,radius:18});
- const b=HEROES.hunter;this.bot=this.spawn('red','hero',930,300,{role:'hunter',hp:b.hp,maxHp:b.hp,mana:b.mana,maxMana:b.mana,attack:b.attack,armor:b.armor,range:b.range,speed:b.speed,radius:18});
+ const allied=BLUE_TEAM.filter(r=>r!==role).slice(0,4);
+ // Seleção livre: o herói escolhido substitui o primeiro slot da composição original.
+ const enemyRoles=RED_TEAM.filter(r=>r!==role);
+ while(enemyRoles.length<5){const candidate=BLUE_TEAM.find(r=>r!==role&&!enemyRoles.includes(r));if(!candidate)break;enemyRoles.push(candidate);}
+ for(const [i,r] of allied.entries()){const b=HEROES[r];this.spawn('blue','hero',155+i*22,230+i*36,{role:r,hp:b.hp,maxHp:b.hp,mana:b.mana,maxMana:b.mana,attack:b.attack,armor:b.armor,range:b.range,speed:b.speed,radius:18});}
+ for(const [i,r] of enemyRoles.entries()){const b=HEROES[r];const enemy=this.spawn('red','hero',925-i*22,230+i*36,{role:r,hp:b.hp,maxHp:b.hp,mana:b.mana,maxMana:b.mana,attack:b.attack,armor:b.armor,range:b.range,speed:b.speed,radius:18});if(i===0)this.bot=enemy;}
+
  this.spawn('blue','core',55,300,{hp:850,maxHp:850,radius:36,attack:0,speed:0});
  this.spawn('red','core',1045,300,{hp:850,maxHp:850,radius:36,attack:0,speed:0});
  this.spawn('blue','tower',330,300,{hp:260,maxHp:260,attack:24,armor:8,range:165,speed:0,radius:23});
@@ -53,7 +59,7 @@ export class Game {
  const enemies=this.units.filter(v=>v.alive&&v.team!==u.team);
  if(!enemies.length||u.kind==='core')continue;
  const decision=decideBot(u,enemies);
- if(u.team==='red'&&u.kind==='hero')this.moveUnit(u,decision.x,decision.y);
+ if(u.kind==='hero'&&u.id!==this.hero.id)this.moveUnit(u,decision.x,decision.y);
  if(u.kind==='minion')this.moveUnit(u,decision.x,decision.y);
  const target=enemies.sort((a,b)=>this.distance(u,a)-this.distance(u,b))[0];
  if(u.attack>0&&target&&this.distance(u,target)<=u.range+target.radius&&u.cooldown===0){this.hit(target,u.attack,u);u.cooldown=u.kind==='tower'?35:u.kind==='hero'?29:50;}
