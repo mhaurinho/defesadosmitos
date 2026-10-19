@@ -2,6 +2,7 @@ import {describe,expect,test,vi} from 'vitest';
 import {Game} from '../src/game/engine';
 import {decideBot,decideBotCast} from '../src/game/bots';
 import {LANE_Y,lanePath} from '../src/game/lanes';
+import {HARD_CC_IMMUNITY,StatusBook} from '../src/game/status';
 import {buyItem} from '../src/game/economy';
 import {HEROES,ITEMS,physicalDamage,type Unit} from '../src/game/data';
 
@@ -170,6 +171,48 @@ describe('três rotas',()=>{
   const hpBefore=enemy.maxHp;enemy.hp=hpBefore;
   (g as any).hit(enemy,Math.round(tower.attack*2.5),tower);
   expect(hpBefore-enemy.hp).toBeGreaterThan(tower.attack*2);
+ });
+});
+
+describe('controle',()=>{
+ test('atordoado não anda, não ataca e não lança; enraizado ataca mas não anda',()=>{
+  const book=new StatusBook();const u=unit({});
+  book.apply(u,{kind:'stun',ticks:30},0);
+  expect([book.canMove(u,10),book.canAttack(u,10),book.canCast(u,10)]).toEqual([false,false,false]);
+  expect([book.canMove(u,30),book.canAttack(u,30),book.canCast(u,30)]).toEqual([true,true,true]);
+  const r=unit({id:2});book.apply(r,{kind:'root',ticks:30},0);
+  expect([book.canMove(r,10),book.canAttack(r,10),book.canCast(r,10)]).toEqual([false,true,true]);
+ });
+ test('silêncio bloqueia só habilidades e lentidão usa a mais forte',()=>{
+  const book=new StatusBook();const u=unit({});
+  book.apply(u,{kind:'silence',ticks:30},0);
+  expect([book.canMove(u,5),book.canAttack(u,5),book.canCast(u,5)]).toEqual([true,true,false]);
+  book.apply(u,{kind:'slow',ticks:30,power:0.2},0);book.apply(u,{kind:'slow',ticks:30,power:0.45},0);
+  expect(book.speedMult(u,5)).toBeCloseTo(0.55);
+  expect(book.speedMult(u,40)).toBe(1);
+ });
+ test('imunidade curta impede controle duro em cadeia; estruturas são imunes',()=>{
+  const book=new StatusBook();const u=unit({});
+  expect(book.apply(u,{kind:'stun',ticks:30},0)).toBe(true);
+  expect(book.apply(u,{kind:'root',ticks:30},20)).toBe(false);
+  expect(book.apply(u,{kind:'slow',ticks:30,power:0.3},20)).toBe(true);
+  expect(book.apply(u,{kind:'stun',ticks:30},30+HARD_CC_IMMUNITY)).toBe(true);
+  expect(book.apply(unit({id:5,kind:'tower'}),{kind:'stun',ticks:30},0)).toBe(false);
+ });
+ test('Raízes Vivas prendem o inimigo no lugar dentro da partida',()=>{
+  const g=new Game('curupira');
+  const enemy=g.units.find(u=>u.kind==='hero'&&u.team==='red')!;
+  enemy.x=g.hero.x+60;enemy.y=g.hero.y;enemy.hp=enemy.maxHp=5000;
+  g.cast('q');
+  expect(g.status.has(enemy,'root',g.tick)).toBe(true);
+  const x=enemy.x;for(let i=0;i<30;i++)g.step();
+  expect(enemy.x).toBe(x);
+ });
+ test('jogador atordoado não lança habilidade',()=>{
+  const g=new Game('saci');
+  g.status.apply(g.hero,{kind:'stun',ticks:60},g.tick);
+  g.cast('q');
+  expect(g.cooldowns.q).toBe(0);expect(g.notice).toBe('Atordoado!');
  });
 });
 

@@ -4,10 +4,11 @@ import {HERO_LANES,LANES,advanceWaypoint,towerSpot} from './lanes';
 import {buyItem} from './economy';
 import {allocateTalent,availableTalentPoints,TALENTS,type Path,type TalentState,type Mutation} from './talents';
 import {SKILLS,canCast,type Slot} from './skills';
+import {StatusBook} from './status';
 import {ELEMENTS,react,type Effect} from './reactions';
 import {collectRune,environment,spawnRune,terrainAt,terrainBonus,visible,type Rune} from './world';
 export class Game {
- runes:Rune[]=[];private runeSeq=0;effects=new Map<number,Effect[]>();talents:TalentState={path:null,rank:0,points:0}; units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;cooldowns:Record<Slot,number>={q:0,w:0,e:0,r:0};skillCooldowns=new Map<number,Record<Slot,number>>();
+ runes:Rune[]=[];private runeSeq=0;effects=new Map<number,Effect[]>();status=new StatusBook();talents:TalentState={path:null,rank:0,points:0}; units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;cooldowns:Record<Slot,number>={q:0,w:0,e:0,r:0};skillCooldowns=new Map<number,Record<Slot,number>>();
  get level(){return this.hero.level;}
  get xp(){return this.hero.xp;}
  destination={x:170,y:300};private nextId=0;private role:Role='curupira';
@@ -17,7 +18,7 @@ export class Game {
  this.units.push(u);return u;
  }
  reset(role:Role=this.role){
- this.role=role;this.runes=[];this.runeSeq=0;this.effects.clear();this.talents={path:null,rank:0,points:0};this.units=[];this.nextId=0;this.inventory=[];this.gold=0;this.kills=0;this.skillCooldowns.clear();this.tick=0;this.winner=null;this.notice='';this.qCooldown=0;this.wCooldown=0;this.cooldowns={q:0,w:0,e:0,r:0};
+ this.role=role;this.runes=[];this.runeSeq=0;this.effects.clear();this.status.clear();this.talents={path:null,rank:0,points:0};this.units=[];this.nextId=0;this.inventory=[];this.gold=0;this.kills=0;this.skillCooldowns.clear();this.tick=0;this.winner=null;this.notice='';this.qCooldown=0;this.wCooldown=0;this.cooldowns={q:0,w:0,e:0,r:0};
  const s=HEROES[role];this.hero=this.spawn('blue','hero',170,300,{role,hp:s.hp,maxHp:s.hp,mana:s.mana,maxMana:s.mana,attack:s.attack,armor:s.armor,range:s.range,speed:s.speed,radius:18});
  const allied=BLUE_TEAM.filter(r=>r!==role).slice(0,4);
  // Seleção livre: o herói escolhido substitui o primeiro slot da composição original.
@@ -39,6 +40,7 @@ export class Game {
  buy(id:string){if(!this.hero.alive)return;const result=buyItem(id,this.gold,this.inventory,this.hero);this.gold=result.gold;this.inventory=result.inventory;this.notice=result.message;}
  cast(slot:Slot){
  if(!this.hero.alive||this.winner)return;
+ if(!this.status.canCast(this.hero,this.tick)){this.notice=this.status.has(this.hero,'stun',this.tick)?'Atordoado!':'Silenciado!';return;}
  const check=canCast(this.hero,slot,this.cooldowns,this.level);
  if(!check.ok){this.notice=check.reason;return;}
  const skill=SKILLS[this.hero.role!][slot];
@@ -64,6 +66,7 @@ export class Game {
    const mult=attackMutation==='execute'&&low?1+0.3*rank:attackMutation==='pierce'?1+0.12*rank:attackMutation==='echo'?1+0.1*rank:1;
    const dealt=Math.round((skill.power+caster.level*4)*mult);
    this.hit(target,dealt,caster,true);
+   if(skill.cc)this.status.apply(target,skill.cc,this.tick);
    const element=ELEMENTS[caster.role!];const result=react(this.effects.get(target.id)??[],element,caster.id,this.tick);
    this.effects.set(target.id,result.effects);
    if(result.damage)this.hit(target,result.damage,caster,true);
@@ -85,13 +88,13 @@ export class Game {
   if(supportMutation==='root'||supportMutation==='aura'||supportMutation==='ward'||supportMutation==='fortify')for(const ally of this.units)if(ally.alive&&ally.team===caster.team&&this.distance(caster,ally)<160)ally.hp=Math.min(ally.maxHp,ally.hp+25*rank);
  }else if(skill.kind==='dash'){
   const dx=aim.x-caster.x,dy=aim.y-caster.y,d=Math.hypot(dx,dy);
-  if(d>1){const step=Math.min(d,skill.power);caster.x=Math.max(20,Math.min(1080,caster.x+dx/d*step));caster.y=Math.max(40,Math.min(560,caster.y+dy/d*step));}
+  if(d>1&&this.status.canMove(caster,this.tick)){const step=Math.min(d,skill.power);caster.x=Math.max(20,Math.min(1080,caster.x+dx/d*step));caster.y=Math.max(40,Math.min(560,caster.y+dy/d*step));}
   if(supportMutation==='relay'||supportMutation==='rescue')for(const ally of this.units)if(ally.alive&&ally.team===caster.team&&ally.id!==caster.id&&this.distance(caster,ally)<110){ally.hp=Math.min(ally.maxHp,ally.hp+20*rank);break;}
  }
  this.qCooldown=this.cooldowns.q;this.wCooldown=this.cooldowns.w;
  }
  private distance(a:Unit,b:Unit){return Math.hypot(a.x-b.x,a.y-b.y);}
- private moveUnit(u:Unit,x:number,y:number){const d=Math.hypot(x-u.x,y-u.y);if(d>0.5){const bonus=terrainBonus(u.role,terrainAt(u.x,u.y),environment(this.tick).phase);const n=Math.min(u.speed*bonus.speed,d);u.x+=(x-u.x)/d*n;u.y+=(y-u.y)/d*n;}}
+ private moveUnit(u:Unit,x:number,y:number){if(!this.status.canMove(u,this.tick))return;const d=Math.hypot(x-u.x,y-u.y);if(d>0.5){const bonus=terrainBonus(u.role,terrainAt(u.x,u.y),environment(this.tick).phase);const n=Math.min(u.speed*bonus.speed*this.status.speedMult(u,this.tick),d);u.x+=(x-u.x)/d*n;u.y+=(y-u.y)/d*n;}}
  private hit(target:Unit,raw:number,source:Unit,magic=false){
  if(!target.alive)return;
  const structure=target.kind==='tower'||target.kind==='core';
@@ -108,6 +111,7 @@ export class Game {
  // XP dividida entre os heróis próximos: lutar em grupo acelera a partida, mas não multiplica a experiência.
  const receivers=xp?this.units.filter(h=>h.alive&&h.kind==='hero'&&h.team!==target.team&&this.distance(h,target)<=XP_SHARE_RADIUS):[];
  for(const h of receivers)this.gainXp(Math.round(xp/receivers.length),h);
+ this.status.forget(target);
  if(target.kind==='hero')target.respawn=180;
  }
  private gainXp(amount:number,hero:Unit=this.hero){
@@ -145,13 +149,13 @@ export class Game {
  if(u.kind==='hero'&&u.id!==this.hero.id){
  this.moveUnit(u,decision.x,decision.y);
  // Bots reavaliam habilidades a cada 12 ticks, escalonados por id para não lançarem todos juntos.
- if((this.tick+u.id)%12===0){const allies=this.units.filter(v=>v.alive&&v.kind==='hero'&&v.team===u.team);const plan=decideBotCast(u,decision,enemies,allies,this.skillCooldowns.get(u.id)!);if(plan)this.castFor(u,plan.slot,plan.aim);}
+ if((this.tick+u.id)%12===0&&this.status.canCast(u,this.tick)){const allies=this.units.filter(v=>v.alive&&v.kind==='hero'&&v.team===u.team);const plan=decideBotCast(u,decision,enemies,allies,this.skillCooldowns.get(u.id)!);if(plan)this.castFor(u,plan.slot,plan.aim);}
  }
  if(u.kind==='minion')this.moveUnit(u,decision.x,decision.y);
  if(!enemies.length)continue;
  // Herói IA só bate no alvo escolhido pela decisão; demais unidades atacam o mais próximo.
  const target=u.kind==='hero'&&u!==this.hero?decision.target:enemies.sort((a,b)=>this.distance(u,a)-this.distance(u,b))[0];
- if(u.attack>0&&target&&this.distance(u,target)<=u.range+target.radius&&u.cooldown===0){const terrain=terrainBonus(u.role,terrainAt(u.x,u.y),environment(this.tick).phase);this.hit(target,Math.round(u.attack*terrain.damage*(u.kind==='tower'&&target.kind==='hero'?TOWER_HERO_MULT:1)),u);u.cooldown=u.kind==='tower'?35:u.kind==='hero'?29:50;}
+ if(u.attack>0&&target&&this.distance(u,target)<=u.range+target.radius&&u.cooldown===0&&this.status.canAttack(u,this.tick)){const terrain=terrainBonus(u.role,terrainAt(u.x,u.y),environment(this.tick).phase);this.hit(target,Math.round(u.attack*terrain.damage*(u.kind==='tower'&&target.kind==='hero'?TOWER_HERO_MULT:1)),u);u.cooldown=u.kind==='tower'?35:u.kind==='hero'?29:50;}
  }
  this.units=this.units.filter(u=>u.alive||u.kind==='hero'||u.kind==='core'||u.kind==='tower');
  }
