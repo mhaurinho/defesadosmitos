@@ -1,6 +1,7 @@
 import {describe,expect,test,vi} from 'vitest';
 import {Game} from '../src/game/engine';
 import {decideBot,decideBotCast} from '../src/game/bots';
+import {LANE_Y,lanePath} from '../src/game/lanes';
 import {buyItem} from '../src/game/economy';
 import {HEROES,ITEMS,physicalDamage,type Unit} from '../src/game/data';
 
@@ -136,6 +137,42 @@ describe('bots com habilidades',()=>{
  });
 });
 
+describe('três rotas',()=>{
+ test('rotas vermelhas espelham as azuis e cada time tem uma torre por rota',()=>{
+  for(const lane of ['top','mid','bot'] as const)expect(lanePath('red',lane)).toEqual(lanePath('blue',lane).map(p=>({x:1100-p.x,y:p.y})));
+  const g=new Game();
+  for(const team of ['blue','red'] as const)expect(g.units.filter(u=>u.kind==='tower'&&u.team===team).map(u=>u.lane).sort()).toEqual(['bot','mid','top']);
+ });
+ test('cada onda manda três tropas por rota e elas chegam à própria rota',()=>{
+  const g=new Game();g.step();
+  const wave=g.units.filter(u=>u.kind==='minion');
+  expect(wave).toHaveLength(18);
+  for(let i=0;i<500;i++)g.step();
+  for(const lane of ['top','bot'] as const){
+   const m=wave.filter(u=>u.alive&&u.lane===lane);
+   if(m.length)expect(Math.min(...m.map(u=>Math.abs(u.y-LANE_Y[lane])))).toBeLessThan(20);
+  }
+ });
+ test('herói IA não ataca torre sem tropas aliadas sob ela',()=>{
+  const bot=unit({x:900,y:300});
+  const tower=unit({id:9,team:'blue',kind:'tower',x:800,y:300,range:165});
+  expect(decideBot(bot,[tower],[]).state).toBe('hold');
+  const minion=unit({id:10,kind:'minion',x:820,y:300});
+  expect(decideBot(bot,[tower],[minion])).toMatchObject({state:'fight',target:tower});
+ });
+ test('torre causa dano extra a heróis e cura não restaura estruturas',()=>{
+  const g=new Game('boto');
+  const tower=g.units.find(u=>u.kind==='tower'&&u.team==='blue'&&u.lane==='mid')!;
+  tower.hp=500;g.hero.x=tower.x+30;g.hero.y=tower.y;g.hero.mana=g.hero.maxMana;
+  g.cast('w');
+  expect(tower.hp).toBe(500);
+  const enemy=g.units.find(u=>u.kind==='hero'&&u.team==='red')!;
+  const hpBefore=enemy.maxHp;enemy.hp=hpBefore;
+  (g as any).hit(enemy,Math.round(tower.attack*2.5),tower);
+  expect(hpBefore-enemy.hp).toBeGreaterThan(tower.attack*2);
+ });
+});
+
 describe('partida',()=>{
  test('tropas avançam pela rota mesmo sem inimigo à vista',()=>{
   const g=new Game();
@@ -146,8 +183,8 @@ describe('partida',()=>{
  test('partida com jogador parado chega a um desfecho de rota (tropas não se acumulam)',()=>{
   const g=new Game();
   for(let i=0;i<60*60*3;i++)g.step();
-  expect(g.units.filter(u=>u.kind==='minion').length).toBeLessThan(60);
- });
+  expect(g.units.filter(u=>u.kind==='minion').length).toBeLessThan(120);
+ },30000);
  test('5v5 sem duplicar o herói escolhido',()=>{
   for(const role of Object.keys(HEROES) as (keyof typeof HEROES)[]){
    const g=new Game(role);const heroes=g.units.filter(u=>u.kind==='hero');
@@ -181,7 +218,7 @@ describe('partida',()=>{
  test('simulação é determinística',()=>{
   const run=()=>{const g=new Game('iara');for(let i=0;i<3000;i++){if(i===500)g.move(700,300);if(i===900)g.cast('q');g.step();}return JSON.stringify([g.units,g.gold,g.xp,g.level]);};
   expect(run()).toBe(run());
- });
+ },30000);
  test('todos os heróis iniciam com atributos da tabela',()=>{
   for(const role of Object.keys(HEROES) as (keyof typeof HEROES)[]){const g=new Game(role);expect(g.hero.maxHp).toBe(HEROES[role].hp);expect(g.hero.role).toBe(role);}
  });

@@ -1,5 +1,6 @@
-import {HEROES,BLUE_TEAM,RED_TEAM,FOUNTAIN_RADIUS,FOUNTAIN_REGEN,TOWER_HP,CORE_HP,SKILL_STRUCTURE_MULT,PASSIVE_GOLD_TICKS,XP_SHARE_RADIUS,physicalDamage,type Unit,type Team,type Role,type Item} from './data';
+import {HEROES,BLUE_TEAM,RED_TEAM,FOUNTAIN_RADIUS,FOUNTAIN_REGEN,TOWER_HP,CORE_HP,SKILL_STRUCTURE_MULT,TOWER_HERO_MULT,PASSIVE_GOLD_TICKS,XP_SHARE_RADIUS,physicalDamage,type Unit,type Team,type Role,type Item} from './data';
 import {decideBot,decideBotCast} from './bots';
+import {HERO_LANES,LANES,advanceWaypoint,towerSpot} from './lanes';
 import {buyItem} from './economy';
 import {allocateTalent,availableTalentPoints,TALENTS,type Path,type TalentState,type Mutation} from './talents';
 import {SKILLS,canCast,type Slot} from './skills';
@@ -23,13 +24,12 @@ export class Game {
  const enemyRoles=RED_TEAM.filter(r=>r!==role);
  // Completa o time vermelho com quem sobrou do azul, sem repetir aliados nem o escolhido.
  while(enemyRoles.length<5){const candidate=BLUE_TEAM.find(r=>r!==role&&!enemyRoles.includes(r)&&!allied.includes(r));if(!candidate)break;enemyRoles.push(candidate);}
- for(const [i,r] of allied.entries()){const b=HEROES[r];this.spawn('blue','hero',155+i*22,230+i*36,{role:r,hp:b.hp,maxHp:b.hp,mana:b.mana,maxMana:b.mana,attack:b.attack,armor:b.armor,range:b.range,speed:b.speed,radius:18});}
- for(const [i,r] of enemyRoles.entries()){const b=HEROES[r];const enemy=this.spawn('red','hero',925-i*22,230+i*36,{role:r,hp:b.hp,maxHp:b.hp,mana:b.mana,maxMana:b.mana,attack:b.attack,armor:b.armor,range:b.range,speed:b.speed,radius:18});if(i===0)this.bot=enemy;}
+ for(const [i,r] of allied.entries()){const b=HEROES[r];this.spawn('blue','hero',155+i*22,230+i*36,{lane:HERO_LANES[i],waypoint:0,role:r,hp:b.hp,maxHp:b.hp,mana:b.mana,maxMana:b.mana,attack:b.attack,armor:b.armor,range:b.range,speed:b.speed,radius:18});}
+ for(const [i,r] of enemyRoles.entries()){const b=HEROES[r];const enemy=this.spawn('red','hero',945-i*22,230+i*36,{lane:HERO_LANES[i],waypoint:0,role:r,hp:b.hp,maxHp:b.hp,mana:b.mana,maxMana:b.mana,attack:b.attack,armor:b.armor,range:b.range,speed:b.speed,radius:18});if(i===0)this.bot=enemy;}
 
  this.spawn('blue','core',55,300,{hp:CORE_HP,maxHp:CORE_HP,radius:36,attack:0,speed:0});
  this.spawn('red','core',1045,300,{hp:CORE_HP,maxHp:CORE_HP,radius:36,attack:0,speed:0});
- this.spawn('blue','tower',330,300,{hp:TOWER_HP,maxHp:TOWER_HP,attack:24,armor:8,range:165,speed:0,radius:23});
- this.spawn('red','tower',770,300,{hp:TOWER_HP,maxHp:TOWER_HP,attack:24,armor:8,range:165,speed:0,radius:23});
+ for(const team of ['blue','red'] as const)for(const lane of LANES){const p=towerSpot(team,lane);this.spawn(team,'tower',p.x,p.y,{lane,hp:TOWER_HP,maxHp:TOWER_HP,attack:24,armor:8,range:165,speed:0,radius:23});}
  for(const u of this.units)if(u.kind==='hero')this.skillCooldowns.set(u.id,{q:0,w:0,e:0,r:0});
  this.cooldowns=this.skillCooldowns.get(this.hero.id)!;
  this.destination={x:170,y:300};
@@ -75,7 +75,7 @@ export class Game {
    if(attackMutation==='silence')target.cooldown=Math.max(target.cooldown,20*rank);
   }
  }else if(skill.kind==='heal'){
-  for(const ally of this.units)if(ally.alive&&ally.team===caster.team&&(skill.radius===0?ally.id===caster.id:this.distance(caster,ally)<skill.radius+(supportMutation==='tide'?45*rank:0))) {
+  for(const ally of this.units)if(ally.alive&&ally.kind==='hero'&&ally.team===caster.team&&(skill.radius===0?ally.id===caster.id:this.distance(caster,ally)<skill.radius+(supportMutation==='tide'?45*rank:0))) {
    ally.hp=Math.min(ally.maxHp,ally.hp+Math.round(skill.power+caster.level*5));
    if(supportMutation==='bond')ally.mana=Math.min(ally.maxMana,ally.mana+15*rank);
    if(supportMutation==='shield'||supportMutation==='veil')ally.hp=Math.min(ally.maxHp,ally.hp+20*rank);
@@ -115,7 +115,13 @@ export class Game {
  while(hero.xp>=hero.level*100){hero.xp-=hero.level*100;hero.level++;hero.maxHp+=35;hero.hp=Math.min(hero.maxHp,hero.hp+70);hero.attack+=5;
  if(hero===this.hero){this.talents.points=availableTalentPoints(hero.level)-this.talents.rank;this.notice='Nível '+hero.level+'!';}}
  }
- private wave(){for(const team of ['blue','red'] as const)for(let i=0;i<3;i++)this.spawn(team,'minion',team==='blue'?110-i*20:990+i*20,280+i*20,{hp:85,maxHp:85,attack:11,armor:1,range:38,speed:0.8,radius:10});}
+ private wave(){
+ // Uma onda de três tropas por rota; elas saem da base deslocadas na direção da própria rota.
+ for(const team of ['blue','red'] as const)for(const lane of LANES)for(let i=0;i<3;i++){
+  const dy=lane==='top'?-45:lane==='bot'?45:0;
+  this.spawn(team,'minion',team==='blue'?110-i*20:990+i*20,300+dy+(i-1)*12,{lane,waypoint:0,hp:85,maxHp:85,attack:11,armor:1,range:38,speed:0.8,radius:10});
+ }
+ }
  step(){
  if(this.winner)return;this.tick++;
  const spawned=spawnRune(this.tick,++this.runeSeq);if(spawned)this.runes.push(spawned);
@@ -126,7 +132,7 @@ export class Game {
  this.qCooldown=this.cooldowns.q;this.wCooldown=this.cooldowns.w;
  if(this.tick%PASSIVE_GOLD_TICKS===0)this.gold++;
  for(const u of this.units){
- if(!u.alive){if(u.kind==='hero'&&u.respawn>0){u.respawn--;if(u.respawn===0){u.alive=true;u.hp=u.maxHp;u.mana=u.maxMana;u.x=u.team==='blue'?170:930;u.y=300;if(u===this.hero)this.destination={x:u.x,y:u.y};if(u===this.hero)this.notice='Você renasceu!';}}continue;}
+ if(!u.alive){if(u.kind==='hero'&&u.respawn>0){u.respawn--;if(u.respawn===0){u.alive=true;u.hp=u.maxHp;u.mana=u.maxMana;u.x=u.team==='blue'?170:930;u.y=300;u.waypoint=0;if(u===this.hero)this.destination={x:u.x,y:u.y};if(u===this.hero)this.notice='Você renasceu!';}}continue;}
  if(u.cooldown>0)u.cooldown--;
  if(u.kind==='hero'){u.mana=Math.min(u.maxMana,u.mana+0.08);
  const fountainX=u.team==='blue'?100:1000;
@@ -134,7 +140,8 @@ export class Game {
  const enemies=this.units.filter(v=>v.alive&&v.team!==u.team&&visible(u,v,this.tick));
  if(u.kind==='core')continue;
  // Sem inimigo visível a unidade continua avançando pela rota; a visão só limita alvos.
- const decision=decideBot(u,enemies);
+ if(u.kind==='minion'||u.kind==='hero')advanceWaypoint(u);
+ const decision=decideBot(u,enemies,u.kind==='hero'?this.units.filter(v=>v.alive&&v.team===u.team&&v.kind==='minion'):[]);
  if(u.kind==='hero'&&u.id!==this.hero.id){
  this.moveUnit(u,decision.x,decision.y);
  // Bots reavaliam habilidades a cada 12 ticks, escalonados por id para não lançarem todos juntos.
@@ -142,8 +149,9 @@ export class Game {
  }
  if(u.kind==='minion')this.moveUnit(u,decision.x,decision.y);
  if(!enemies.length)continue;
- const target=enemies.sort((a,b)=>this.distance(u,a)-this.distance(u,b))[0];
- if(u.attack>0&&target&&this.distance(u,target)<=u.range+target.radius&&u.cooldown===0){const terrain=terrainBonus(u.role,terrainAt(u.x,u.y),environment(this.tick).phase);this.hit(target,Math.round(u.attack*terrain.damage),u);u.cooldown=u.kind==='tower'?35:u.kind==='hero'?29:50;}
+ // Herói IA só bate no alvo escolhido pela decisão; demais unidades atacam o mais próximo.
+ const target=u.kind==='hero'&&u!==this.hero?decision.target:enemies.sort((a,b)=>this.distance(u,a)-this.distance(u,b))[0];
+ if(u.attack>0&&target&&this.distance(u,target)<=u.range+target.radius&&u.cooldown===0){const terrain=terrainBonus(u.role,terrainAt(u.x,u.y),environment(this.tick).phase);this.hit(target,Math.round(u.attack*terrain.damage*(u.kind==='tower'&&target.kind==='hero'?TOWER_HERO_MULT:1)),u);u.cooldown=u.kind==='tower'?35:u.kind==='hero'?29:50;}
  }
  this.units=this.units.filter(u=>u.alive||u.kind==='hero'||u.kind==='core'||u.kind==='tower');
  }

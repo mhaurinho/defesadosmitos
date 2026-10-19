@@ -2,6 +2,7 @@ import {Game} from './game/engine';
 import {HEROES,ITEMS,type Role} from './game/data';
 import {TALENTS} from './game/talents';
 import {SKILLS,type Slot} from './game/skills';
+import {LANES,lanePath} from './game/lanes';
 import {environment,terrainAt} from './game/world';
 const game=new Game();
 const canvas=document.querySelector<HTMLCanvasElement>('#game')!;
@@ -32,7 +33,12 @@ function draw(){
  ctx.fillStyle='#194c68';ctx.fillRect(475,65,150,470);
  ctx.fillStyle='#24523b';ctx.fillRect(190,0,230,225);ctx.fillRect(680,375,230,225);
  ctx.fillStyle='#8c9da055';ctx.fillRect(310,380,180,220);ctx.fillRect(610,0,180,210);
- ctx.fillStyle='#5b5947';ctx.fillRect(0,245,W,110);ctx.fillStyle='#75684c';ctx.fillRect(0,280,W,40);
+ // Três rotas: margem larga de terra e trilha central, do núcleo azul ao vermelho.
+ ctx.lineCap='round';ctx.lineJoin='round';
+ for(const [width,color] of [[70,'#5b5947'],[30,'#75684c']] as const)for(const lane of LANES){
+  ctx.beginPath();ctx.moveTo(55,300);for(const p of lanePath('blue',lane))ctx.lineTo(p.x,p.y);
+  ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();
+ }
  for(const rune of game.runes){ctx.beginPath();ctx.fillStyle='#e9bd51';ctx.arc(rune.x,rune.y,14,0,Math.PI*2);ctx.fill();ctx.fillStyle='#222';ctx.textAlign='center';ctx.font='bold 14px system-ui';ctx.fillText('✦',rune.x,rune.y+5);}
  const world=environment(game.tick);
  if(world.phase==='night'){ctx.fillStyle='rgba(3,9,32,0.38)';ctx.fillRect(0,0,W,H);}
