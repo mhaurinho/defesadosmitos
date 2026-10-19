@@ -2,7 +2,7 @@ export type Team='blue'|'red';
 export type Role='saci'|'curupira'|'iara'|'boitata'|'cuca'|'boto'|'mula'|'caipora'|'matinta'|'mapinguari';
 export type Kind='hero'|'minion'|'tower'|'core';
 export type Class='assassino'|'lutador'|'mago'|'tanque'|'suporte'|'atirador';
-export interface Unit {id:number;team:Team;kind:Kind;role?:Role;x:number;y:number;hp:number;maxHp:number;mana:number;maxMana:number;attack:number;armor:number;range:number;speed:number;radius:number;cooldown:number;alive:boolean;respawn:number}
+export interface Unit {id:number;team:Team;kind:Kind;role?:Role;x:number;y:number;hp:number;maxHp:number;mana:number;maxMana:number;attack:number;armor:number;range:number;speed:number;radius:number;cooldown:number;alive:boolean;respawn:number;level:number;xp:number}
 export interface Item {id:string;name:string;cost:number;attack?:number;hp?:number;armor?:number;speed?:number}
 export interface HeroDef {name:string;title:string;class:Class;hp:number;mana:number;attack:number;armor:number;range:number;speed:number;q:string;w:string;e:string;r:string}
 export const HEROES:Record<Role,HeroDef>={
@@ -29,3 +29,7 @@ export const FOUNTAIN_RADIUS=140;
 export const FOUNTAIN_REGEN=0.012;
 export const XP_SHARE_RADIUS=420;
 export const PASSIVE_GOLD_TICKS=60;
+export const TOWER_HP=1100;
+export const CORE_HP=2200;
+/** Habilidades causam dano reduzido a estruturas, que caem principalmente por ataques básicos e tropas. */
+export const SKILL_STRUCTURE_MULT=0.3;
