@@ -3,8 +3,9 @@ import {decideBot} from './bots';
 import {buyItem} from './economy';
 import {allocateTalent,availableTalentPoints,TALENTS,type Path,type TalentState,type Mutation} from './talents';
 import {SKILLS,canCast,type Slot} from './skills';
+import {ELEMENTS,react,type Effect} from './reactions';
 export class Game {
- talents:TalentState={path:null,rank:0,points:0}; units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;xp=0;level=1;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;cooldowns:Record<Slot,number>={q:0,w:0,e:0,r:0};
+ effects=new Map<number,Effect[]>();talents:TalentState={path:null,rank:0,points:0}; units:Unit[]=[]; hero!:Unit; bot!:Unit; inventory:Item[]=[];gold=0;xp=0;level=1;kills=0;tick=0;winner:Team|null=null;notice='';qCooldown=0;wCooldown=0;cooldowns:Record<Slot,number>={q:0,w:0,e:0,r:0};
  destination={x:170,y:300};private nextId=0;private role:Role='curupira';
  constructor(role:Role='curupira'){this.reset(role);}
  private spawn(team:Team,kind:Unit['kind'],x:number,y:number,stats:Partial<Unit>):Unit{
@@ -12,7 +13,7 @@ export class Game {
  this.units.push(u);return u;
  }
  reset(role:Role=this.role){
- this.role=role;this.talents={path:null,rank:0,points:0};this.units=[];this.nextId=0;this.inventory=[];this.gold=0;this.xp=0;this.level=1;this.kills=0;this.tick=0;this.winner=null;this.notice='';this.qCooldown=0;this.wCooldown=0;this.cooldowns={q:0,w:0,e:0,r:0};
+ this.role=role;this.effects.clear();this.talents={path:null,rank:0,points:0};this.units=[];this.nextId=0;this.inventory=[];this.gold=0;this.xp=0;this.level=1;this.kills=0;this.tick=0;this.winner=null;this.notice='';this.qCooldown=0;this.wCooldown=0;this.cooldowns={q:0,w:0,e:0,r:0};
  const s=HEROES[role];this.hero=this.spawn('blue','hero',170,300,{role,hp:s.hp,maxHp:s.hp,mana:s.mana,maxMana:s.mana,attack:s.attack,armor:s.armor,range:s.range,speed:s.speed,radius:18});
  const allied=BLUE_TEAM.filter(r=>r!==role).slice(0,4);
  // Seleção livre: o herói escolhido substitui o primeiro slot da composição original.
@@ -47,6 +48,10 @@ export class Game {
    const mult=attackMutation==='execute'&&low?1+0.3*rank:attackMutation==='pierce'?1+0.12*rank:attackMutation==='echo'?1+0.1*rank:1;
    const dealt=Math.round((skill.power+this.level*4)*mult);
    this.hit(target,dealt,this.hero,true);
+   const element=ELEMENTS[this.hero.role!];const result=react(this.effects.get(target.id)??[],element,this.hero.id,this.tick);
+   this.effects.set(target.id,result.effects);
+   if(result.damage)this.hit(target,result.damage,this.hero,true);
+   if(result.reactions.length)this.notice='Reação: '+result.reactions.join(' + ');
    if(attackMutation==='lifesteal')this.hero.hp=Math.min(this.hero.maxHp,this.hero.hp+Math.round(dealt*0.15*rank));
    if(attackMutation==='burn')this.hit(target,Math.round(12*rank),this.hero,true);
    if(attackMutation==='curse')target.armor=Math.max(0,target.armor-rank);
