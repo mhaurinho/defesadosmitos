@@ -1,6 +1,7 @@
 import {Game} from './game/engine';
 import {HEROES,ITEMS,type Role} from './game/data';
 import {TALENTS} from './game/talents';
+import {SKILLS,type Slot} from './game/skills';
 const game=new Game();
 const canvas=document.querySelector<HTMLCanvasElement>('#game')!;
 const ctx=canvas.getContext('2d')!;
@@ -21,7 +22,7 @@ for(const item of ITEMS){const button=document.createElement('button');button.te
 hud.after(controls);
 document.querySelector('#restart')?.addEventListener('click',()=>game.reset(select.value as Role));
 canvas.addEventListener('pointerdown',e=>{const rect=canvas.getBoundingClientRect();game.move((e.clientX-rect.left)*canvas.width/rect.width,(e.clientY-rect.top)*canvas.height/rect.height);});
-window.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='q'||e.key.toLowerCase()==='w')game.cast(e.key.toLowerCase() as 'q'|'w');});
+window.addEventListener('keydown',e=>{if(['q','w','e','r'].includes(e.key.toLowerCase()))game.cast(e.key.toLowerCase() as Slot);});
 function draw(){
  const W=canvas.width,H=canvas.height;
  ctx.fillStyle='#14251e';ctx.fillRect(0,0,W,H);
@@ -42,7 +43,7 @@ function draw(){
 }
 const STEP=1000/60;let last=0,accumulator=0;
 function frame(now:number){if(!last)last=now;accumulator+=Math.min(250,now-last);last=now;let loops=0;while(accumulator>=STEP&&loops++<8){game.step();accumulator-=STEP;}
- passive.textContent='✨ Passiva: '+TALENTS[game.hero.role!].passive.name+' | Talentos: '+game.talents.points+' pontos | Ramo: '+(game.talents.path??'livre')+' '+game.talents.rank+'/3';
- hud.textContent='❤️ '+Math.ceil(game.hero.hp)+'/'+game.hero.maxHp+' | 🔮 '+Math.floor(game.hero.mana)+' | ⭐ Nível '+game.level+' | 🪙 '+game.gold+' ouro | ⚔ '+game.kills+' tropas | Q '+(game.qCooldown?Math.ceil(game.qCooldown/60)+'s':'pronta')+' | W '+(game.wCooldown?Math.ceil(game.wCooldown/60)+'s':'pronta')+' | 🎒 '+game.inventory.length+'/6 | '+game.notice;
+ passive.textContent='✨ Q '+SKILLS[game.hero.role!].q.name+' · W '+SKILLS[game.hero.role!].w.name+' · E '+SKILLS[game.hero.role!].e.name+' · R '+SKILLS[game.hero.role!].r.name+' | Passiva: '+TALENTS[game.hero.role!].passive.name+' | Talentos: '+game.talents.points+' pontos | Ramo: '+(game.talents.path??'livre')+' '+game.talents.rank+'/3';
+ hud.textContent='❤️ '+Math.ceil(game.hero.hp)+'/'+game.hero.maxHp+' | 🔮 '+Math.floor(game.hero.mana)+' | ⭐ Nível '+game.level+' | 🪙 '+game.gold+' ouro | ⚔ '+game.kills+' tropas | Q '+(game.qCooldown?Math.ceil(game.qCooldown/60)+'s':'pronta')+' | W '+(game.wCooldown?Math.ceil(game.wCooldown/60)+'s':'pronta')+' | E '+(game.cooldowns.e?Math.ceil(game.cooldowns.e/60)+'s':'pronta')+' | R '+(game.level<6?'nível 6':game.cooldowns.r?Math.ceil(game.cooldowns.r/60)+'s':'pronta')+' | 🎒 '+game.inventory.length+'/6 | '+game.notice;
  draw();requestAnimationFrame(frame);}
 app.setAttribute('data-version','0.2.0');requestAnimationFrame(frame);
